@@ -98,8 +98,44 @@ pub async fn capture(
         "webhook captured"
     );
 
+    // Enforce retention policy: delete events older than the retention window
+    // and trim to the maximum stored events count. Runs after each capture.
+    enforce_retention(&state).await;
+
     // 202 Accepted: the webhook was received and stored.
     Ok(Json(json!({ "accepted": true, "event_id": event_id })).into_response())
+}
+
+/// Delete events older than the retention window and trim to max stored events.
+async fn enforce_retention(state: &Arc<AppState>) {
+    // Delete by age.
+    if state.config.event_retention_days > 0 {
+        let cutoff =
+            chrono::Utc::now() - chrono::Duration::days(state.config.event_retention_days as i64);
+        if let Err(e) = sqlx::query("DELETE FROM events WHERE received_at < ?")
+            .bind(cutoff.to_rfc3339())
+            .execute(&state.pool)
+            .await
+        {
+            tracing::warn!(error = ?e, "retention age cleanup failed");
+        }
+    }
+
+    // Trim by count. Delete the oldest events exceeding the limit.
+    if state.config.max_stored_events > 0 {
+        let max = state.config.max_stored_events as i64;
+        if let Err(e) = sqlx::query(
+            "DELETE FROM events WHERE id IN (
+                SELECT id FROM events ORDER BY received_at DESC LIMIT -1 OFFSET ?
+            )",
+        )
+        .bind(max)
+        .execute(&state.pool)
+        .await
+        {
+            tracing::warn!(error = ?e, "retention count cleanup failed");
+        }
+    }
 }
 
 /// Serialize headers into a JSON object. Repeated header names become arrays.

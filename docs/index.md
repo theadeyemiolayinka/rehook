@@ -29,7 +29,7 @@ features:
   - title: Two dashboards
     details: Admin dashboard for server management. Agent web UI for local target configuration, event inspection, and replay. Both bound to their respective contexts.
   - title: Self-hostable
-    details: Single binary server. SQLite storage. No Redis, no Kafka, no cloud dependencies. Deploy with Docker Compose or Coolify.
+    details: Single binary server. SQLite storage. No Redis, no Kafka, no cloud dependencies. Deploy with Docker Compose, Coolify, or Dokploy.
   - title: Security first
     details: Argon2id passwords. HTTP-only session cookies. Sensitive header masking. Hop-by-hop filtering. No response body leakage to the server.
 ---

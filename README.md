@@ -89,7 +89,7 @@ See [.env.example](.env.example) and [Server Configuration](docs/server/configur
 ## Deployment
 
 - [Docker](docs/deployment/docker.md)
-- [Coolify](docs/deployment/coolify.md)
+- [Coolify/Dokploy](docs/deployment/coolify.md)
 - [Production](docs/deployment/production.md)
 
 ## Development
@@ -118,3 +118,7 @@ Dual-licensed under MIT or Apache-2.0, at your option. See [LICENSE-MIT](LICENSE
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports should follow [SECURITY.md](SECURITY.md).
+
+## Author
+
+[TheAdeyemiOlayinka](https://github.com/theadeyemiolayinka)

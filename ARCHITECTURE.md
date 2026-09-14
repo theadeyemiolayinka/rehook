@@ -23,7 +23,7 @@ A single Axum process. Responsibilities:
 
 The server is the only component that listens on a public port. It listens on
 `0.0.0.0:8080` and expects HTTPS termination from the deployment environment
-(Coolify, Caddy, Cloudflare, etc.).
+(Coolify, Dokploy, Caddy, Cloudflare, etc.).
 
 ### Agent (`apps/agent`)
 
@@ -125,5 +125,5 @@ server does not blindly trust `X-Forwarded-For` or `CF-Connecting-IP`.
 Single Docker image (multi-stage) builds both Rust binaries and the frontend.
 SQLite persists through a mounted `/data` volume. The server listens on
 `8080`; the deployment environment terminates TLS. `docker compose up -d` is
-the intended deployment path. Coolify is supported through standard Docker
+the intended deployment path. Coolify and Dokploy are supported through standard Docker
 plus environment variables and a persistent volume.

@@ -14,6 +14,7 @@ pub const COOKIE_NAME: &str = "hookrelay_session";
 
 /// A session row.
 #[derive(Debug, Clone, sqlx::FromRow)]
+#[allow(dead_code)]
 pub struct Session {
     pub id: String,
     pub user_id: String,

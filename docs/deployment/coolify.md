@@ -1,23 +1,27 @@
-# Coolify Deployment
+# Coolify/Dokploy Deployment
 
-HookRelay deploys on Coolify using standard Docker Compose.
+HookRelay deploys on Coolify or Dokploy using standard Docker Compose. Both platforms support Docker Compose deployments with persistent volumes, TLS termination, and automatic health checks.
 
 ## Steps
 
-1. Create a new resource in Coolify and select "Docker Compose".
-2. Point Coolify at the repository root. It will use `compose.yml`.
-3. Set the required environment variables in the Coolify UI:
+1. Create a new resource in your platform and select "Docker Compose".
+2. Point the platform at the repository root. It will use `compose.yml`.
+3. Set the required environment variables in the platform UI:
    - `ADMIN_PASSWORD`: a strong password for the admin user.
    - `HOOKRELAY_SESSION_KEY`: generate with `openssl rand -hex 32`.
-   - `HOOKRELAY_PUBLIC_BASE_URL`: your Coolify-assigned HTTPS URL (e.g. `https://hookrelay.yourdomain.com`).
+   - `HOOKRELAY_PUBLIC_BASE_URL`: your assigned HTTPS URL (e.g. `https://hookrelay.yourdomain.com`).
 4. Deploy.
 
-Coolify handles TLS termination. The server listens on port 8080 inside the container.
+Both Coolify and Dokploy handle TLS termination. The server listens on port 8080 inside the container.
 
 ## Persistent storage
 
-Coolify preserves the named volume `hookrelay-data` across deploys. SQLite data survives container restarts and updates.
+The named volume `hookrelay-data` is preserved across deploys. SQLite data survives container restarts and updates.
 
 ## Health check
 
-The Compose file defines a healthcheck via `GET /healthz`. Coolify uses this to determine container health.
+The Compose file defines a healthcheck via `GET /healthz`. Both platforms use this to determine container health.
+
+## Updating
+
+Pull the latest changes and redeploy. Your data is preserved in the persistent volume.

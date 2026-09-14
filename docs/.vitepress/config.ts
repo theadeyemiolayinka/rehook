@@ -53,7 +53,7 @@ export default defineConfig({
         text: 'Deployment',
         items: [
           { text: 'Docker', link: '/deployment/docker' },
-          { text: 'Coolify', link: '/deployment/coolify' },
+          { text: 'Coolify/Dokploy', link: '/deployment/coolify' },
           { text: 'Production', link: '/deployment/production' },
         ],
       },
@@ -78,7 +78,7 @@ export default defineConfig({
 
     footer: {
       message: 'Released under the MIT or Apache-2.0 License.',
-      copyright: 'Copyright (c) HookRelay Contributors',
+      copyright: 'Copyright 2024-2026 TheAdeyemiOlayinka <github.com/theadeyemiolayinka>',
     },
 
     outline: {

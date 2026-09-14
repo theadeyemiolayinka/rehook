@@ -1,8 +1,10 @@
 //! Authentication API routes: login, logout, current user.
 
+use std::net::IpAddr;
 use std::sync::Arc;
 
-use axum::extract::State;
+use axum::extract::{ConnectInfo, State};
+use axum::http::HeaderValue;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
@@ -39,22 +41,70 @@ struct UserResponse {
     is_admin: bool,
 }
 
+/// Extract the client IP from the request, accounting for trusted proxies.
+fn client_ip(
+    x_forwarded_for: Option<&HeaderValue>,
+    connect_info: Option<IpAddr>,
+    trusted_proxy_hops: usize,
+) -> Option<IpAddr> {
+    if let Some(xff) = x_forwarded_for {
+        if let Ok(s) = xff.to_str() {
+            let parts: Vec<&str> = s.split(',').map(|p| p.trim()).collect();
+            if !parts.is_empty() {
+                // The client IP is the leftmost entry, minus trusted proxy hops.
+                let idx = parts
+                    .len()
+                    .saturating_sub(1)
+                    .saturating_sub(trusted_proxy_hops);
+                if let Some(ip_str) = parts.get(idx) {
+                    if let Ok(ip) = ip_str.parse::<IpAddr>() {
+                        return Some(ip);
+                    }
+                }
+            }
+        }
+    }
+    connect_info
+}
+
 async fn login(
     State(state): State<Arc<AppState>>,
+    ConnectInfo(addr): ConnectInfo<std::net::SocketAddr>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<LoginRequest>,
 ) -> ApiResult<impl IntoResponse> {
+    let ip = client_ip(
+        headers.get("x-forwarded-for"),
+        Some(addr.ip()),
+        state.config.trusted_proxy_hops,
+    )
+    .unwrap_or_else(|| addr.ip());
+
+    // Rate limit check.
+    if state.login_limiter.is_blocked(ip).await {
+        return Err(ApiError::RateLimited);
+    }
+
     if req.username.is_empty() || req.password.is_empty() {
+        state.login_limiter.record_failure(ip).await;
         return Err(ApiError::BadRequest(
             "username and password are required".into(),
         ));
     }
 
-    let user = session::find_user_by_username(&state.pool, &req.username)
+    let user = match session::find_user_by_username(&state.pool, &req.username)
         .await
         .map_err(|_| ApiError::Internal)?
-        .ok_or(ApiError::Unauthorized)?;
+    {
+        Some(u) => u,
+        None => {
+            state.login_limiter.record_failure(ip).await;
+            return Err(ApiError::Unauthorized);
+        }
+    };
 
     if !verify_password(&req.password, &user.password_hash) {
+        state.login_limiter.record_failure(ip).await;
         return Err(ApiError::Unauthorized);
     }
 
@@ -64,13 +114,10 @@ async fn login(
 
     session::touch_login(&state.pool, &user.id).await.ok();
 
+    // Clear rate limit on successful login.
+    state.login_limiter.clear(ip).await;
+
     let expires_at = Utc::now() + chrono::Duration::hours(state.config.session_ttl_hours as i64);
-    // Secure flag: set when the public base URL is https, or when behind a
-    // trusted proxy that terminates TLS. We default to true in production
-    // deployments; localhost dev over http still works because browsers
-    // accept Secure cookies on localhost in modern implementations, but to
-    // keep local dev frictionless we disable Secure when the public URL is
-    // plain http.
     let secure = state.config.public_base_url.starts_with("https://");
     let cookie = session_cookie_header(&token, expires_at, secure);
 
@@ -100,6 +147,5 @@ async fn logout(
 }
 
 async fn me(session: AuthSession) -> ApiResult<impl IntoResponse> {
-    // Fetch the user to return current info.
     Ok(Json(json!({ "authenticated": true, "session_id": session.0.id })).into_response())
 }

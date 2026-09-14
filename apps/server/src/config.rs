@@ -61,7 +61,7 @@ impl Config {
         let session_key_hex = env_or("HOOKRELAY_SESSION_KEY", "")?;
         let session_key_hex = if session_key_hex.is_empty() {
             tracing::warn!("HOOKRELAY_SESSION_KEY unset; generating an ephemeral key. Sessions will not survive restarts.");
-            hex::encode(&rand::random::<[u8; 32]>())
+            hex::encode(rand::random::<[u8; 32]>())
         } else {
             session_key_hex
         };

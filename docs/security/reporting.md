@@ -4,7 +4,7 @@
 
 If you discover a security vulnerability in HookRelay, do not open a public GitHub issue.
 
-Instead, email the project maintainers directly with a description of the vulnerability and steps to reproduce it.
+Instead, report it privately via [GitHub Security Advisories](https://github.com/theadeyemiolayinka/hookrelay/security/advisories/new) or contact the maintainer at https://github.com/theadeyemiolayinka.
 
 ## What to include
 

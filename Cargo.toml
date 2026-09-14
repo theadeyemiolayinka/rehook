@@ -12,6 +12,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/theadeyemiolayinka/hookrelay"
 rust-version = "1.80"
+authors = ["TheAdeyemiOlayinka <github.com/theadeyemiolayinka>"]
 
 [workspace.dependencies]
 # Async runtime

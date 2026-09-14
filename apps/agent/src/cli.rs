@@ -268,7 +268,7 @@ async fn history(limit: i64) -> Result<()> {
         return Ok(());
     }
     println!(
-        "{:<36} {:<8} {:<6} {:<8} {}",
+        "{:<36} {:<8} {:<6} {:<8} {:<10}",
         "id", "status", "http", "ms", "target"
     );
     for r in rows {

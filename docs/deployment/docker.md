@@ -22,7 +22,7 @@ docker compose up -d
 
 ## TLS termination
 
-The server listens on plain HTTP. Use a reverse proxy (Caddy, Traefik, Cloudflare, Coolify) for TLS termination. Set `HOOKRELAY_PUBLIC_BASE_URL` to your HTTPS URL so the dashboard constructs correct webhook URLs.
+The server listens on plain HTTP. Use a reverse proxy (Caddy, Traefik, Cloudflare, Coolify, Dokploy) for TLS termination. Set `HOOKRELAY_PUBLIC_BASE_URL` to your HTTPS URL so the dashboard constructs correct webhook URLs.
 
 ## Environment variables
 

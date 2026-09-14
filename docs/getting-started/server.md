@@ -90,14 +90,14 @@ hooks.example.com {
 
 Set `HOOKRELAY_PUBLIC_BASE_URL` to your HTTPS URL so webhook URLs and session cookies are configured correctly.
 
-### With Coolify
+### With Coolify or Dokploy
 
-1. Create a new resource in Coolify and select Docker Compose.
-2. Point Coolify at the repository or paste the compose file.
-3. Set the environment variables in the Coolify UI.
+1. Create a new resource in Coolify or Dokploy and select Docker Compose.
+2. Point the platform at the repository or paste the compose file.
+3. Set the environment variables in the platform UI.
 4. Deploy.
 
-See [Coolify deployment](../deployment/coolify.md) for details.
+See [Coolify/Dokploy deployment](../deployment/coolify.md) for details.
 
 ## Updating the server
 

@@ -44,7 +44,20 @@ async fn list(
     )
     .fetch_all(&state.pool)
     .await?;
-    Ok(Json(json!({ "agents": agents })))
+
+    // Report connection status for each agent.
+    let mut agent_list: Vec<serde_json::Value> = Vec::new();
+    for agent in &agents {
+        let agent_id = uuid::Uuid::parse_str(&agent.id).unwrap_or_default();
+        let connected = state.agents.is_connected(agent_id).await;
+        let mut value = serde_json::to_value(agent).unwrap_or(serde_json::Value::Null);
+        if let Some(obj) = value.as_object_mut() {
+            obj.insert("connected".into(), serde_json::Value::Bool(connected));
+        }
+        agent_list.push(value);
+    }
+
+    Ok(Json(json!({ "agents": agent_list })))
 }
 
 async fn create(

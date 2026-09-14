@@ -15,7 +15,6 @@ use serde_json::json;
 
 use crate::config::AgentConfig;
 use crate::credentials;
-use crate::db::{LocalDb, StoredEvent};
 use crate::targets;
 use crate::web::WebState;
 
@@ -38,7 +37,7 @@ pub fn router() -> Router<WebState> {
 
 /// Reload config from disk into state so changes from CLI or web UI are
 /// reflected.
-fn reload_config(state: &WebState) -> Result<AgentConfig, String> {
+fn reload_config(_state: &WebState) -> Result<AgentConfig, String> {
     AgentConfig::load().map_err(|e| format!("failed to reload config: {e}"))
 }
 
