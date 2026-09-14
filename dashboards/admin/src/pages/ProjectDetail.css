@@ -1,0 +1,120 @@
+.detail-section {
+  margin-bottom: var(--space-6);
+}
+
+.detail-section-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+  margin-bottom: var(--space-3);
+}
+
+.detail-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.endpoint-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.endpoint-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.endpoint-row:last-child {
+  border-bottom: none;
+}
+
+.endpoint-row-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.endpoint-row-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.endpoint-row-name {
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+.endpoint-row-url {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.endpoint-row-url code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  background: var(--bg);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.overview-row {
+  display: grid;
+  grid-template-columns: 70px 1fr 90px 110px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+  transition: background 0.1s;
+}
+
+.overview-row:last-child {
+  border-bottom: none;
+}
+
+.overview-row:hover {
+  background: var(--bg-hover);
+}
+
+.overview-row-method {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-row-size {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  text-align: right;
+}
+
+.overview-row-time {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  text-align: right;
+}

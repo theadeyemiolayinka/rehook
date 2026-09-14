@@ -1,0 +1,548 @@
+//! Local API for the agent web UI.
+//!
+//! All endpoints serve data from the local agent state. No data is fetched
+//! from the public server. Target validation reuses the same security policy
+//! as CLI delivery.
+
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::routing::{delete, get, post};
+use axum::{Json, Router};
+use base64::Engine;
+use serde::Serialize;
+use serde_json::json;
+
+use crate::config::AgentConfig;
+use crate::credentials;
+use crate::db::{LocalDb, StoredEvent};
+use crate::targets;
+use crate::web::WebState;
+
+pub fn router() -> Router<WebState> {
+    Router::new()
+        .route("/status", get(status))
+        .route("/auth/login", post(login))
+        .route("/auth/logout", post(logout))
+        .route("/targets", get(list_targets).post(add_target))
+        .route("/targets/:id", delete(remove_target))
+        .route("/routes", get(list_routes).post(add_route))
+        .route("/routes/:project_id", delete(remove_route))
+        .route("/events", get(list_events))
+        .route("/events/:id", get(get_event))
+        .route("/events/:id/replay", post(replay_event))
+        .route("/deliveries", get(list_deliveries))
+        .route("/db/stats", get(db_stats))
+        .route("/db/clear", delete(clear_db))
+}
+
+/// Reload config from disk into state so changes from CLI or web UI are
+/// reflected.
+fn reload_config(state: &WebState) -> Result<AgentConfig, String> {
+    AgentConfig::load().map_err(|e| format!("failed to reload config: {e}"))
+}
+
+// --- Auth ---
+
+#[derive(serde::Deserialize)]
+struct LoginRequest {
+    server: String,
+    agent_id: String,
+    token: String,
+    #[serde(default)]
+    name: Option<String>,
+}
+
+async fn login(
+    State(state): State<WebState>,
+    Json(req): Json<LoginRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    if req.server.trim().is_empty() {
+        return Err(ApiError::BadRequest("server is required".into()));
+    }
+    if req.agent_id.trim().is_empty() {
+        return Err(ApiError::BadRequest("agent_id is required".into()));
+    }
+    if req.token.trim().is_empty() {
+        return Err(ApiError::BadRequest("token is required".into()));
+    }
+
+    // Validate the server is reachable (same check as CLI login).
+    let health = format!("{}/healthz", req.server.trim_end_matches('/'));
+    let resp = reqwest::Client::new()
+        .get(&health)
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("could not reach server: {e}")))?;
+
+    if !resp.status().is_success() {
+        return Err(ApiError::BadRequest(format!(
+            "server health check failed: {}",
+            resp.status()
+        )));
+    }
+
+    let agent_uuid = uuid::Uuid::parse_str(req.agent_id.trim())
+        .map_err(|e| ApiError::BadRequest(format!("invalid agent_id: {e}")))?;
+
+    let name = req.name.unwrap_or_else(|| "default".to_string());
+
+    // Store the token securely (same path as CLI).
+    credentials::store_token(agent_uuid, req.token.trim())
+        .map_err(|e| ApiError::Internal(format!("failed to store token: {e}")))?;
+
+    // Update config.
+    let mut config = reload_config(&state)?;
+    config.server_url = Some(req.server.trim().to_string());
+    config.agent_id = Some(agent_uuid);
+    config.agent_name = Some(name);
+    config
+        .save()
+        .map_err(|e| ApiError::Internal(format!("failed to save config: {e}")))?;
+
+    tracing::info!(server = %req.server, agent_id = %agent_uuid, "agent logged in via web UI");
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "ok": true,
+            "agent_id": agent_uuid.to_string(),
+            "server": req.server.trim(),
+        })),
+    ))
+}
+
+async fn logout(State(state): State<WebState>) -> Result<impl IntoResponse, ApiError> {
+    credentials::delete_token().map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let mut config = reload_config(&state)?;
+    config.agent_id = None;
+    config.server_url = None;
+    config.agent_name = None;
+    config
+        .save()
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    tracing::info!("agent logged out via web UI");
+
+    Ok((StatusCode::OK, Json(json!({ "ok": true }))))
+}
+
+// --- Status ---
+
+#[derive(Serialize)]
+struct ConnectionStatusResponse {
+    server_url: Option<String>,
+    agent_id: Option<String>,
+    agent_name: Option<String>,
+    authenticated: bool,
+    connected: bool,
+    last_connected_at: Option<String>,
+    subscribed_projects: Vec<String>,
+}
+
+async fn status(State(state): State<WebState>) -> impl IntoResponse {
+    // Reload config to get the latest state (may have changed via CLI).
+    let config = reload_config(&state).unwrap_or_else(|_| state.config.clone());
+
+    let authenticated = config.agent_id.is_some();
+    let status = ConnectionStatusResponse {
+        server_url: config.server_url.clone(),
+        agent_id: config.agent_id.map(|u| u.to_string()),
+        agent_name: config.agent_name.clone(),
+        authenticated,
+        // The web server does not know the live WebSocket state. It reports
+        // whether the agent is configured to connect.
+        connected: false,
+        last_connected_at: None,
+        subscribed_projects: config.project_targets.keys().cloned().collect(),
+    };
+    Json(json!(status))
+}
+
+// --- Targets ---
+
+#[derive(Serialize)]
+struct TargetResponse {
+    id: String,
+    url: String,
+}
+
+async fn list_targets(State(state): State<WebState>) -> impl IntoResponse {
+    let config = reload_config(&state).unwrap_or_else(|_| state.config.clone());
+    let targets: Vec<TargetResponse> = config
+        .targets
+        .iter()
+        .map(|(id, url)| TargetResponse {
+            id: id.clone(),
+            url: url.clone(),
+        })
+        .collect();
+    Json(json!({ "targets": targets }))
+}
+
+#[derive(serde::Deserialize)]
+struct AddTargetRequest {
+    id: String,
+    url: String,
+}
+
+async fn add_target(
+    State(state): State<WebState>,
+    Json(req): Json<AddTargetRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    if req.id.trim().is_empty() {
+        return Err(ApiError::BadRequest("id is required".into()));
+    }
+    targets::validate_url(&req.url).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+
+    let mut config = reload_config(&state)?;
+    config
+        .targets
+        .insert(req.id.trim().to_string(), req.url.trim().to_string());
+    config
+        .save()
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok((StatusCode::CREATED, Json(json!({ "ok": true }))))
+}
+
+async fn remove_target(
+    State(state): State<WebState>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut config = reload_config(&state)?;
+    if config.targets.remove(&id).is_none() {
+        return Err(ApiError::NotFound);
+    }
+    // Also remove any routes pointing to this target.
+    config.project_targets.retain(|_, tid| tid != &id);
+    config
+        .save()
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// --- Routes ---
+
+#[derive(Serialize)]
+struct RouteResponse {
+    project_id: String,
+    target_id: String,
+}
+
+async fn list_routes(State(state): State<WebState>) -> impl IntoResponse {
+    let config = reload_config(&state).unwrap_or_else(|_| state.config.clone());
+    let routes: Vec<RouteResponse> = config
+        .project_targets
+        .iter()
+        .map(|(project_id, target_id)| RouteResponse {
+            project_id: project_id.clone(),
+            target_id: target_id.clone(),
+        })
+        .collect();
+    Json(json!({ "routes": routes }))
+}
+
+#[derive(serde::Deserialize)]
+struct AddRouteRequest {
+    project_id: String,
+    target_id: String,
+}
+
+async fn add_route(
+    State(state): State<WebState>,
+    Json(req): Json<AddRouteRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    if req.project_id.trim().is_empty() {
+        return Err(ApiError::BadRequest("project_id is required".into()));
+    }
+    if req.target_id.trim().is_empty() {
+        return Err(ApiError::BadRequest("target_id is required".into()));
+    }
+
+    let mut config = reload_config(&state)?;
+
+    // Validate the target exists.
+    if !config.targets.contains_key(req.target_id.trim()) {
+        return Err(ApiError::BadRequest(format!(
+            "unknown target '{}'; add it first",
+            req.target_id.trim()
+        )));
+    }
+
+    // Validate the project_id is a valid UUID.
+    uuid::Uuid::parse_str(req.project_id.trim())
+        .map_err(|e| ApiError::BadRequest(format!("invalid project_id: {e}")))?;
+
+    config.project_targets.insert(
+        req.project_id.trim().to_string(),
+        req.target_id.trim().to_string(),
+    );
+    config
+        .save()
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    tracing::info!(
+        project = %req.project_id,
+        target = %req.target_id,
+        "route added via web UI"
+    );
+
+    Ok((StatusCode::CREATED, Json(json!({ "ok": true }))))
+}
+
+async fn remove_route(
+    State(state): State<WebState>,
+    Path(project_id): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut config = reload_config(&state)?;
+    if config.project_targets.remove(&project_id).is_none() {
+        return Err(ApiError::NotFound);
+    }
+    config
+        .save()
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// --- Events ---
+
+async fn list_events(State(state): State<WebState>) -> impl IntoResponse {
+    let events = state.db.recent_events(200).await.unwrap_or_default();
+    let rows: Vec<serde_json::Value> = events
+        .iter()
+        .map(|e| {
+            json!({
+                "id": e.id,
+                "project_id": e.project_id,
+                "endpoint_id": e.endpoint_id,
+                "request_method": e.request_method,
+                "content_type": e.content_type,
+                "received_at": e.received_at,
+                "payload_size": e.payload_size,
+                "headers": serde_json::from_str::<serde_json::Value>(&e.headers_json).unwrap_or(serde_json::Value::Null),
+                "body": e.body.as_deref().map(|b| base64::engine::general_purpose::STANDARD.encode(b)),
+            })
+        })
+        .collect();
+    Json(json!({ "events": rows }))
+}
+
+async fn get_event(
+    State(state): State<WebState>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let event = state
+        .db
+        .get_event(&id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let event = event.ok_or(ApiError::NotFound)?;
+    Ok(Json(json!({
+        "id": event.id,
+        "project_id": event.project_id,
+        "endpoint_id": event.endpoint_id,
+        "request_method": event.request_method,
+        "content_type": event.content_type,
+        "received_at": event.received_at,
+        "payload_size": event.payload_size,
+        "headers": serde_json::from_str::<serde_json::Value>(&event.headers_json).unwrap_or(serde_json::Value::Null),
+        "body": event.body.as_deref().map(|b| base64::engine::general_purpose::STANDARD.encode(b)),
+    })))
+}
+
+#[derive(serde::Deserialize)]
+struct ReplayRequest {
+    target_id: String,
+}
+
+async fn replay_event(
+    State(state): State<WebState>,
+    Path(event_id): Path<String>,
+    Json(req): Json<ReplayRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let event = state
+        .db
+        .get_event(&event_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let event = event.ok_or(ApiError::NotFound)?;
+
+    // Validate the target using the same security policy as CLI delivery.
+    let config = reload_config(&state)?;
+    let url = targets::resolve_target(&config.targets, &req.target_id)
+        .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+
+    // Build the delivery instruction from the stored event.
+    let headers: Vec<hookrelay_protocol::ReplayHeader> =
+        serde_json::from_str::<serde_json::Value>(&event.headers_json)
+            .ok()
+            .and_then(|v| match v {
+                serde_json::Value::Object(map) => {
+                    let mut out = Vec::new();
+                    for (name, value) in map {
+                        if hookrelay_protocol::is_hop_by_hop(&name) {
+                            continue;
+                        }
+                        match value {
+                            serde_json::Value::String(s) => {
+                                out.push(hookrelay_protocol::ReplayHeader { name, value: s })
+                            }
+                            serde_json::Value::Array(arr) => {
+                                for v in arr {
+                                    if let serde_json::Value::String(s) = v {
+                                        out.push(hookrelay_protocol::ReplayHeader {
+                                            name: name.clone(),
+                                            value: s,
+                                        });
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    Some(out)
+                }
+                _ => None,
+            })
+            .unwrap_or_default();
+
+    let instruction = hookrelay_protocol::DeliveryInstruction {
+        delivery_id: uuid::Uuid::new_v4(),
+        event_id: uuid::Uuid::parse_str(&event.id).unwrap_or_default(),
+        project_id: uuid::Uuid::parse_str(&event.project_id).unwrap_or_default(),
+        target_id: req.target_id.clone(),
+        method: event.request_method.clone(),
+        content_type: event.content_type.clone(),
+        headers,
+        body: event
+            .body
+            .as_deref()
+            .map(|b| base64::engine::general_purpose::STANDARD.encode(b)),
+    };
+
+    // Perform the local delivery using the same code path as live delivery.
+    let outcome = crate::delivery::deliver(&instruction, &config.targets).await;
+
+    // Record locally.
+    let rec = crate::db::DeliveryRecord {
+        id: instruction.delivery_id.to_string(),
+        event_id: event.id.clone(),
+        target_id: req.target_id,
+        attempt_number: 0,
+        status: if outcome.success {
+            "delivered".into()
+        } else {
+            "failed".into()
+        },
+        http_status: outcome.status_code.map(|s| s as i64),
+        duration_ms: Some(outcome.duration_ms as i64),
+        error_category: outcome
+            .error_category
+            .map(|c| format!("{c:?}").to_lowercase()),
+        error_message: outcome.error_message.clone(),
+        started_at: chrono::Utc::now().to_rfc3339(),
+        completed_at: Some(chrono::Utc::now().to_rfc3339()),
+    };
+    let _ = state.db.record(&rec).await;
+
+    tracing::info!(
+        event_id = %event_id,
+        target = %url,
+        success = outcome.success,
+        status = ?outcome.status_code,
+        "local replay from web UI"
+    );
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "success": outcome.success,
+            "status_code": outcome.status_code,
+            "duration_ms": outcome.duration_ms,
+            "error": outcome.error_message,
+        })),
+    ))
+}
+
+// --- Deliveries ---
+
+async fn list_deliveries(State(state): State<WebState>) -> impl IntoResponse {
+    let records = state.db.recent_deliveries(200).await.unwrap_or_default();
+    let rows: Vec<serde_json::Value> = records
+        .iter()
+        .map(|r| {
+            json!({
+                "id": r.id,
+                "event_id": r.event_id,
+                "target_id": r.target_id,
+                "attempt_number": r.attempt_number,
+                "status": r.status,
+                "http_status": r.http_status,
+                "duration_ms": r.duration_ms,
+                "error_category": r.error_category,
+                "error_message": r.error_message,
+                "started_at": r.started_at,
+                "completed_at": r.completed_at,
+            })
+        })
+        .collect();
+    Json(json!({ "deliveries": rows }))
+}
+
+// --- DB management ---
+
+#[derive(Serialize)]
+struct DbStatsResponse {
+    deliveries_count: i64,
+    events_count: i64,
+    db_size_bytes: i64,
+}
+
+async fn db_stats(State(state): State<WebState>) -> impl IntoResponse {
+    let deliveries_count = state.db.delivery_count().await.unwrap_or(0);
+    let events_count = state.db.event_count().await.unwrap_or(0);
+    let db_size_bytes = state.db.db_size().await.unwrap_or(0);
+    Json(json!(DbStatsResponse {
+        deliveries_count,
+        events_count,
+        db_size_bytes,
+    }))
+}
+
+async fn clear_db(State(state): State<WebState>) -> impl IntoResponse {
+    match state.db.clear_all().await {
+        Ok(()) => (StatusCode::OK, Json(json!({ "ok": true }))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        ),
+    }
+}
+
+// --- Error type ---
+
+enum ApiError {
+    BadRequest(String),
+    NotFound,
+    Internal(String),
+}
+
+impl From<String> for ApiError {
+    fn from(s: String) -> Self {
+        ApiError::Internal(s)
+    }
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> axum::response::Response {
+        let (status, msg) = match self {
+            ApiError::BadRequest(m) => (StatusCode::BAD_REQUEST, m),
+            ApiError::NotFound => (StatusCode::NOT_FOUND, "not found".into()),
+            ApiError::Internal(m) => (StatusCode::INTERNAL_SERVER_ERROR, m),
+        };
+        (status, Json(json!({ "error": msg }))).into_response()
+    }
+}

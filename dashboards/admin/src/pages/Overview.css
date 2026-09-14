@@ -1,0 +1,110 @@
+.overview-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.stat {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+}
+
+.stat-value {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.stat-label {
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.overview-section {
+  margin-bottom: var(--space-6);
+}
+
+.overview-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.overview-section-head h2 {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.overview-link {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.overview-link:hover {
+  color: var(--accent);
+}
+
+.overview-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.overview-row {
+  display: grid;
+  grid-template-columns: 70px 1fr 90px 110px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+  transition: background 0.1s;
+}
+
+.overview-row:last-child {
+  border-bottom: none;
+}
+
+.overview-row:hover {
+  background: var(--bg-hover);
+}
+
+.overview-row-method {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-row-size {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  text-align: right;
+}
+
+.overview-row-time {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .overview-stats {
+    grid-template-columns: 1fr;
+  }
+  .overview-row {
+    grid-template-columns: 60px 1fr 80px;
+  }
+  .overview-row-time {
+    display: none;
+  }
+}

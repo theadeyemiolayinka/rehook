@@ -1,0 +1,33 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      # Required: set an admin password for first boot.
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set}
+      # Required: a 32-byte hex key for session signing. Generate with:
+      #   openssl rand -hex 32
+      HOOKRELAY_SESSION_KEY: ${HOOKRELAY_SESSION_KEY:?HOOKRELAY_SESSION_KEY must be set}
+      # Public URL providers use to send webhooks. Set to your domain.
+      HOOKRELAY_PUBLIC_BASE_URL: ${HOOKRELAY_PUBLIC_BASE_URL:-http://localhost:8080}
+      # Optional tuning.
+      HOOKRELAY_MAX_WEBHOOK_BODY_SIZE: "1048576"
+      HOOKRELAY_MAX_STORED_EVENTS: "10000"
+      HOOKRELAY_EVENT_RETENTION_DAYS: "14"
+      RUST_LOG: "hookrelay=info,tower_http=info"
+    volumes:
+      - hookrelay-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  hookrelay-data:

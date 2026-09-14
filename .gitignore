@@ -1,0 +1,38 @@
+# rust
+/target
+**/target
+Cargo.lock.bak
+
+# node
+dashboards/node_modules
+dashboards/dist
+dashboards/agent/node_modules
+dashboards/agent/dist
+dashboards/server/node_modules
+dashboards/server/dist
+dashboards/admin/node_modules
+dashboards/admin/dist
+
+# docs
+docs/node_modules
+docs/.vitepress/dist
+docs/.vitepress/cache
+
+# editor
+.vscode
+.idea
+*.swp
+.DS_Store
+
+# local data
+/data
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.local
+
+# sqlx
+.sqlx/
+
+.local/
