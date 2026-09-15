@@ -60,17 +60,11 @@ Open `http://localhost:5174`. The API is proxied to `http://localhost:8787`.
 ```bash
 cargo run -p hookrelay-agent -- login --server http://localhost:8080 --agent-id <id> --token <token>
 cargo run -p hookrelay-agent -- target add myapp http://localhost:8000/webhook
-cargo run -p hookrelay-agent -- route add <project-id> myapp
-cargo run -p hookrelay-agent -- start
-```
-
-## Running the agent web UI
-
-```bash
+cargo run -p hookrelay-agent -- route add <endpoint-id> myapp
 cargo run -p hookrelay-agent -- web
 ```
 
-Open `http://localhost:8787`.
+Open `http://localhost:8787`. `hookrelay web` starts both the web UI and the connection loop.
 
 ## Running the docs site
 

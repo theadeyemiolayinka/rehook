@@ -1,143 +1,135 @@
-import { useEffect, useState } from 'react';
-import { api, ApiError, type StoredEvent } from '../lib/api';
+import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { api, ApiError, type StoredEvent, type ServerProject, type ServerEndpoint } from '../lib/api';
+import { IconRefresh } from '../components/Icons';
 
 export function Events() {
-  const [events, setEvents] = useState<StoredEvent[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<StoredEvent | null>(null);
+  const [events, setEvents] = useState<StoredEvent[]>([]);
+  const [endpointMap, setEndpointMap] = useState<Record<string, ServerEndpoint>>({});
+  const [projectMap, setProjectMap] = useState<Record<string, string>>({});
 
-  const load = async () => {
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const data = await api.get<{ events: StoredEvent[] }>('/api/events');
-      setEvents(data.events);
-      setError(null);
+      const [ev, p] = await Promise.all([
+        api.get<{ events: StoredEvent[] }>('/api/events'),
+        api.get<{ projects: ServerProject[] }>('/api/projects'),
+      ]);
+      setEvents(ev.events);
+      const epMap: Record<string, ServerEndpoint> = {};
+      const pMap: Record<string, string> = {};
+      for (const proj of p.projects ?? []) {
+        pMap[proj.id] = proj.name;
+        for (const e of proj.endpoints ?? []) {
+          epMap[e.id] = e;
+        }
+      }
+      setEndpointMap(epMap);
+      setProjectMap(pMap);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'failed to load events');
+      setError(e instanceof ApiError ? e.message : 'Failed to load events');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
-
-  const replay = async (eventId: string) => {
-    const targetId = prompt('Enter target ID to replay to:');
-    if (!targetId) return;
-    try {
-      await api.post(`/api/events/${encodeURIComponent(eventId)}/replay`, { target_id: targetId });
-      alert('Replay triggered. Check History for the result.');
-    } catch (e) {
-      alert(e instanceof ApiError ? e.message : 'replay failed');
-    }
-  };
-
-  const formatBody = (body: string | null) => {
-    if (!body) return '(empty)';
-    try {
-      const decoded = atob(body);
-      try {
-        return JSON.stringify(JSON.parse(decoded), null, 2);
-      } catch {
-        return decoded;
-      }
-    } catch {
-      return body;
-    }
-  };
+  }, [load]);
 
   return (
     <div>
       <div className="page-header">
-        <h1>Events</h1>
-        <p>Captured webhook events stored locally on this agent</p>
+        <div className="page-header-row">
+          <div>
+            <h1>Events</h1>
+            <p>Captured webhook events stored locally on this agent.</p>
+          </div>
+          <button type="button" className="btn btn-sm" onClick={load}>
+            <IconRefresh size={14} /> Refresh
+          </button>
+        </div>
       </div>
 
-      {error && <div className="card toast toast-error">{error}</div>}
-
-      {selected ? (
-        <div>
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-3)' }}>
-              <div className="card-title" style={{ margin: 0 }}>Event Detail</div>
-              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                <button className="btn btn-primary btn-sm" onClick={() => replay(selected.id)}>
-                  Replay
-                </button>
-                <button className="btn btn-sm" onClick={() => setSelected(null)}>
-                  Close
-                </button>
-              </div>
-            </div>
-            <div className="status-row">
-              <span className="status-label">Event ID</span>
-              <span className="status-value">{selected.id}</span>
-            </div>
-            <div className="status-row">
-              <span className="status-label">Method</span>
-              <span className="status-value">{selected.request_method}</span>
-            </div>
-            <div className="status-row">
-              <span className="status-label">Content-Type</span>
-              <span className="status-value">{selected.content_type ?? 'none'}</span>
-            </div>
-            <div className="status-row">
-              <span className="status-label">Received</span>
-              <span className="status-value">{selected.received_at}</span>
-            </div>
-            <div className="status-row">
-              <span className="status-label">Size</span>
-              <span className="status-value">{selected.payload_size} bytes</span>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-title">Headers</div>
-            <div className="code-block">
-              {JSON.stringify(selected.headers, null, 2)}
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-title">Body</div>
-            <div className="code-block">{formatBody(selected.body)}</div>
-          </div>
+      {error ? (
+        <div className="card error-card">
+          <div className="error-title">Unable to load events</div>
+          <div className="error-detail">{error}</div>
+          <button className="btn btn-sm" onClick={load}>
+            Retry
+          </button>
         </div>
       ) : (
         <div className="card">
-          <div className="card-title">Stored Events</div>
-          {events.length === 0 ? (
-            <div className="empty-state">No events stored locally</div>
+          {loading ? (
+            <div className="empty-state">Loading...</div>
+          ) : events.length === 0 ? (
+            <div className="empty-state">
+              No events stored locally. The agent stores events for projects it
+              is subscribed to.
+            </div>
           ) : (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Method</th>
-                  <th>Content-Type</th>
-                  <th>Size</th>
-                  <th>Received</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.map((e) => (
-                  <tr key={e.id} onClick={() => setSelected(e)} style={{ cursor: 'pointer' }}>
-                    <td><span className="badge badge-pending">{e.request_method}</span></td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>
-                      {e.content_type ?? '-'}
-                    </td>
-                    <td>{e.payload_size}</td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>
-                      {e.received_at}
-                    </td>
-                    <td>
-                      <button className="btn btn-sm" onClick={(ev) => { ev.stopPropagation(); replay(e.id); }}>
-                        Replay
-                      </button>
-                    </td>
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Method</th>
+                    <th scope="col">Project</th>
+                    <th scope="col">Endpoint</th>
+                    <th scope="col">Content type</th>
+                    <th scope="col">Size</th>
+                    <th scope="col">Received</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {events.map((e) => (
+                    <tr key={e.id}>
+                      <td>
+                        <Link to={`/events/${e.id}`} className="row-link">
+                          <span className="badge badge-pending">
+                            {e.request_method}
+                          </span>
+                        </Link>
+                      </td>
+                      <td>
+                        <Link to={`/events/${e.id}`} className="row-link">
+                          {projectMap[e.project_id] ?? (
+                            <span className="text-tertiary">{e.project_id.slice(0, 8)}</span>
+                          )}
+                        </Link>
+                      </td>
+                      <td>
+                        <Link to={`/events/${e.id}`} className="row-link">
+                          {endpointMap[e.endpoint_id]?.name ?? (
+                            <span className="text-tertiary">
+                              {e.endpoint_id ? e.endpoint_id.slice(0, 8) : '-'}
+                            </span>
+                          )}
+                        </Link>
+                      </td>
+                      <td className="mono">
+                        <Link to={`/events/${e.id}`} className="row-link">
+                          {e.content_type ?? '-'}
+                        </Link>
+                      </td>
+                      <td>
+                        <Link to={`/events/${e.id}`} className="row-link">
+                          {e.payload_size}
+                        </Link>
+                      </td>
+                      <td className="mono">
+                        <Link to={`/events/${e.id}`} className="row-link">
+                          {e.received_at}
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}

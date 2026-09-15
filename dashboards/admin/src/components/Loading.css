@@ -2,16 +2,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-7);
+  padding: var(--space-8);
 }
 
 .loading-spinner {
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-default);
+  border-top-color: var(--text-tertiary);
   border-radius: 50%;
-  animation: loading-spin 0.6s linear infinite;
+  animation: loading-spin 1s linear infinite;
 }
 
 @keyframes loading-spin {
@@ -21,7 +21,7 @@
 }
 
 .error-state {
-  padding: var(--space-5);
-  color: var(--status-error);
-  font-size: var(--text-sm);
+  padding: var(--space-6);
+  color: var(--danger);
+  font-size: 14px;
 }

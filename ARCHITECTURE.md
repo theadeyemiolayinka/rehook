@@ -47,7 +47,11 @@ destinations.
 ### Dashboard (`dashboard/`)
 
 React + TypeScript + Vite. Built into static assets that the server serves in
-production. Same-origin as the API, so no wildcard CORS is required.
+production. Same-origin as the API, so no wildcard CORS is required. The
+server serves the dashboard as a single-page application: any path that does
+not match a static file or API route falls back to `index.html` so React
+Router can handle client-side routing. The dashboard directory is validated at
+startup to prevent misconfiguration (see SECURITY.md).
 
 ### Protocol (`crates/protocol`)
 

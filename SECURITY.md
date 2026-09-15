@@ -85,3 +85,28 @@ metadata: event id, endpoint id, payload size, duration, request id.
 
 Internal errors (SQL errors, backtraces, internal paths) are never exposed to
 external users. Production responses do not include stack traces.
+
+## Dashboard static file serving
+
+The server serves the built admin dashboard from the directory configured by
+`HOOKRELAY_DASHBOARD_DIR` (default: `./dashboards/admin/dist`). This directory
+is served to any HTTP client via `tower_http::services::ServeDir`.
+
+Misconfiguring this value is a security risk:
+
+- Pointing it at the filesystem root would expose the entire filesystem.
+- Pointing it at the data directory would expose the SQLite database.
+- Including `..` components could traverse outside the intended directory.
+
+The server validates this path at startup and refuses to start if the path
+contains parent traversal components or points at the filesystem root. If
+`index.html` is missing, a warning is logged.
+
+When deploying behind a reverse proxy, ensure the proxy forwards all
+non-API, non-webhook paths to the server so the SPA fallback to `index.html`
+works correctly. Direct requests to dashboard routes like `/settings` or
+`/events` must reach the server, which serves `index.html` for any path that
+does not match a static file or API route.
+
+The agent web UI uses the same serving strategy for the agent dashboard, but
+binds to `127.0.0.1` only, so only the local machine can access it.

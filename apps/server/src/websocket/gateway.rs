@@ -255,26 +255,26 @@ async fn handle_client_message(
                 .await
                 .ok();
         }
-        ClientMessage::Subscribe { project_id } => {
+        ClientMessage::Subscribe { endpoint_id } => {
             // Persist subscription and register in-memory.
             sqlx::query(
-                "INSERT OR IGNORE INTO agent_subscriptions (agent_id, project_id) VALUES (?, ?)",
+                "INSERT OR IGNORE INTO agent_subscriptions (agent_id, endpoint_id) VALUES (?, ?)",
             )
             .bind(agent_id.to_string())
-            .bind(project_id.to_string())
+            .bind(endpoint_id.to_string())
             .execute(&state.pool)
             .await
             .ok();
-            state.agents.subscribe(agent_id, project_id).await?;
+            state.agents.subscribe(agent_id, endpoint_id).await?;
         }
-        ClientMessage::Unsubscribe { project_id } => {
-            sqlx::query("DELETE FROM agent_subscriptions WHERE agent_id = ? AND project_id = ?")
+        ClientMessage::Unsubscribe { endpoint_id } => {
+            sqlx::query("DELETE FROM agent_subscriptions WHERE agent_id = ? AND endpoint_id = ?")
                 .bind(agent_id.to_string())
-                .bind(project_id.to_string())
+                .bind(endpoint_id.to_string())
                 .execute(&state.pool)
                 .await
                 .ok();
-            state.agents.unsubscribe(agent_id, project_id).await?;
+            state.agents.unsubscribe(agent_id, endpoint_id).await?;
         }
         ClientMessage::DeliveryAccepted { delivery_id } => {
             sqlx::query("UPDATE deliveries SET status = 'dispatched' WHERE id = ?")

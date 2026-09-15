@@ -16,11 +16,13 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use axum::Router;
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 
 use crate::config::AgentConfig;
+use crate::connection;
 use crate::db::LocalDb;
+use crate::state::ConnectionState;
 
 /// Shared state for the web server.
 #[derive(Clone)]
@@ -28,14 +30,27 @@ pub struct WebState {
     pub config: AgentConfig,
     pub db: Arc<LocalDb>,
     pub dashboard_dir: PathBuf,
+    pub conn_state: ConnectionState,
 }
 
 /// Start the local web UI server. Binds to 127.0.0.1 by default.
+/// Also starts the connection loop in the background so the agent
+/// connects to the server automatically after login.
 /// If the requested port is taken, tries the next available port up to
 /// 100 attempts, then prints the actual URL.
 pub async fn run(port: u16, dashboard_dir: Option<PathBuf>) -> Result<()> {
     let config = AgentConfig::load()?;
     let db = Arc::new(LocalDb::open().await?);
+    let conn_state = ConnectionState::new();
+
+    // Start the connection loop in the background.
+    let db_clone = Arc::clone(&db);
+    let conn_state_clone = conn_state.clone();
+    tokio::spawn(async move {
+        if let Err(e) = connection::run(db_clone, conn_state_clone).await {
+            tracing::error!(error = %e, "connection loop exited");
+        }
+    });
 
     let dashboard_dir = dashboard_dir.unwrap_or_else(|| {
         // Default: look for the built agent dashboard relative to the
@@ -52,6 +67,7 @@ pub async fn run(port: u16, dashboard_dir: Option<PathBuf>) -> Result<()> {
         config,
         db,
         dashboard_dir: dashboard_dir.clone(),
+        conn_state,
     };
 
     let app = build_router(state);
@@ -90,6 +106,9 @@ fn build_router(state: WebState) -> Router {
     Router::new()
         .nest("/api", api_router)
         .with_state(state.clone())
-        .fallback_service(ServeDir::new(&state.dashboard_dir))
+        .fallback_service(
+            ServeDir::new(&state.dashboard_dir)
+                .fallback(ServeFile::new(state.dashboard_dir.join("index.html"))),
+        )
         .layer(TraceLayer::new_for_http())
 }

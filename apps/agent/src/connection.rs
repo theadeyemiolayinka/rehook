@@ -13,31 +13,98 @@ use crate::config::AgentConfig;
 use crate::credentials;
 use crate::db::{DeliveryRecord, LocalDb};
 use crate::delivery;
+use crate::state::ConnectionState;
 
-/// Run the agent connection loop. Reconnects with exponential backoff. Does
-/// not return unless a fatal error occurs.
-pub async fn run(config: AgentConfig, db: Arc<LocalDb>) -> Result<()> {
-    let server_url = config
-        .server_url
-        .clone()
-        .ok_or_else(|| anyhow::anyhow!("no server_url configured"))?;
-    let agent_id = config
-        .agent_id
-        .ok_or_else(|| anyhow::anyhow!("no agent_id configured"))?;
-    let agent_name = config
-        .agent_name
-        .clone()
-        .unwrap_or_else(|| "agent".to_string());
-
-    let token = credentials::load_token()?;
-
-    let allowlist = Arc::new(config.targets.clone());
-    let project_targets = Arc::new(config.project_targets.clone());
-
+/// Run the agent connection loop. Reconnects with exponential backoff.
+/// Reloads config on each attempt so changes from the web UI or CLI
+/// are picked up without restarting. Does not return unless a fatal
+/// error occurs.
+///
+/// The token is loaded from the keychain once and cached in memory.
+/// Subsequent reconnects use the cached token so the OS keychain is
+/// not prompted repeatedly (which on macOS would ask for a password
+/// each time).
+pub async fn run(db: Arc<LocalDb>, conn_state: ConnectionState) -> Result<()> {
     let mut backoff = Duration::from_secs(1);
     let max_backoff = Duration::from_secs(60);
+    // Longer wait when not logged in yet. Avoids hammering the server
+    // and the keychain before the user has configured credentials.
+    let not_configured_wait = Duration::from_secs(5);
+    // When the server explicitly rejects the agent (bad token, unknown
+    // agent), this is a configuration problem, not a transient failure.
+    // Back off much longer to avoid keychain prompts and log spam.
+    let rejected_wait = Duration::from_secs(30);
 
     loop {
+        let config = match AgentConfig::load() {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(error = %e, "could not load config");
+                tokio::time::sleep(backoff).await;
+                backoff = (backoff * 2).min(max_backoff);
+                continue;
+            }
+        };
+
+        let server_url = match config.server_url.as_deref() {
+            Some(s) => s.to_string(),
+            None => {
+                tracing::info!("no server_url configured; waiting for login");
+                conn_state.set_connected(false);
+                // Wait for a credential change notification or timeout.
+                tokio::select! {
+                    _ = conn_state.wait_for_change() => {}
+                    _ = tokio::time::sleep(not_configured_wait) => {}
+                }
+                backoff = Duration::from_secs(1);
+                continue;
+            }
+        };
+
+        let agent_id = match config.agent_id {
+            Some(id) => id,
+            None => {
+                tracing::info!("no agent_id configured; waiting for login");
+                conn_state.set_connected(false);
+                tokio::select! {
+                    _ = conn_state.wait_for_change() => {}
+                    _ = tokio::time::sleep(not_configured_wait) => {}
+                }
+                backoff = Duration::from_secs(1);
+                continue;
+            }
+        };
+
+        // Use cached token if available. Only hit the keychain if the
+        // cache is empty (first run or after logout).
+        let token = match conn_state.token().await {
+            Some(t) => t,
+            None => match credentials::load_token() {
+                Ok(t) => {
+                    conn_state.set_token(t.clone()).await;
+                    t
+                }
+                Err(_) => {
+                    tracing::info!("no token stored; waiting for login");
+                    conn_state.set_connected(false);
+                    tokio::select! {
+                        _ = conn_state.wait_for_change() => {}
+                        _ = tokio::time::sleep(not_configured_wait) => {}
+                    }
+                    backoff = Duration::from_secs(1);
+                    continue;
+                }
+            },
+        };
+
+        let agent_name = config
+            .agent_name
+            .clone()
+            .unwrap_or_else(|| "agent".to_string());
+
+        let allowlist = Arc::new(config.targets.clone());
+        let endpoint_targets = Arc::new(config.endpoint_targets.clone());
+
         tracing::info!(server = %server_url, "connecting to server");
         match connect_once(
             &server_url,
@@ -45,8 +112,9 @@ pub async fn run(config: AgentConfig, db: Arc<LocalDb>) -> Result<()> {
             &agent_name,
             &token,
             &allowlist,
-            &project_targets,
+            &endpoint_targets,
             &db,
+            &conn_state,
         )
         .await
         {
@@ -55,13 +123,39 @@ pub async fn run(config: AgentConfig, db: Arc<LocalDb>) -> Result<()> {
                 backoff = Duration::from_secs(1);
             }
             Err(e) => {
+                let err_str = e.to_string();
                 tracing::warn!(error = %e, "connection ended");
+                // If the server explicitly rejected the agent, the token
+                // or agent_id is wrong. Back off much longer to avoid
+                // keychain prompts and log spam. The user needs to re-login.
+                if err_str.contains("server rejected agent") {
+                    tracing::warn!(
+                        "server rejected agent; backing off for 30s. Re-login if needed."
+                    );
+                    conn_state.set_connected(false);
+                    tokio::select! {
+                        _ = conn_state.wait_for_change() => {
+                            backoff = Duration::from_secs(1);
+                        }
+                        _ = tokio::time::sleep(rejected_wait) => {
+                            backoff = Duration::from_secs(1);
+                        }
+                    }
+                    continue;
+                }
             }
         }
 
+        conn_state.set_connected(false);
         tracing::info!(?backoff, "reconnecting after backoff");
-        tokio::time::sleep(backoff).await;
-        backoff = (backoff * 2).min(max_backoff);
+        tokio::select! {
+            _ = conn_state.wait_for_change() => {
+                backoff = Duration::from_secs(1);
+            }
+            _ = tokio::time::sleep(backoff) => {
+                backoff = (backoff * 2).min(max_backoff);
+            }
+        }
     }
 }
 
@@ -72,8 +166,9 @@ async fn connect_once(
     agent_name: &str,
     token: &str,
     allowlist: &Arc<std::collections::HashMap<String, String>>,
-    project_targets: &Arc<std::collections::HashMap<String, String>>,
+    endpoint_targets: &Arc<std::collections::HashMap<String, String>>,
     db: &Arc<LocalDb>,
+    conn_state: &ConnectionState,
 ) -> Result<()> {
     // Build the WebSocket URL from the server URL.
     let ws_url = server_url
@@ -106,6 +201,10 @@ async fn connect_once(
     match hookrelay_protocol::decode::<ServerMessage>(&first)? {
         ServerMessage::Welcome { .. } => {
             tracing::info!("authenticated with server");
+            conn_state.set_connected(true);
+            conn_state
+                .set_last_connected(chrono::Utc::now().to_rfc3339())
+                .await;
         }
         ServerMessage::Rejected { reason } => {
             return Err(anyhow::anyhow!("server rejected agent: {reason}"));
@@ -115,10 +214,10 @@ async fn connect_once(
         }
     }
 
-    // Subscribe to configured projects.
-    for project_id in project_targets.keys() {
-        let pid = Uuid::parse_str(project_id).unwrap_or_default();
-        let sub = ClientMessage::Subscribe { project_id: pid };
+    // Subscribe to configured endpoints.
+    for endpoint_id in endpoint_targets.keys() {
+        let eid = Uuid::parse_str(endpoint_id).unwrap_or_default();
+        let sub = ClientMessage::Subscribe { endpoint_id: eid };
         let _ = ws_sink.send(Message::Text(encode(&sub)?)).await;
     }
 
@@ -216,7 +315,7 @@ async fn handle_server_message(
             let event = crate::db::StoredEvent {
                 id: instruction.event_id.to_string(),
                 project_id: instruction.project_id.to_string(),
-                endpoint_id: String::new(),
+                endpoint_id: instruction.endpoint_id.to_string(),
                 request_method: instruction.method.clone(),
                 content_type: instruction.content_type.clone(),
                 received_at: chrono::Utc::now().to_rfc3339(),
@@ -260,11 +359,11 @@ async fn handle_server_message(
             let _ = ws_sink.send(Message::Text(encode(&report)?)).await;
         }
         ServerMessage::HeartbeatAck { .. } => {}
-        ServerMessage::SubscriptionConfirmed { project_id } => {
-            tracing::info!(%project_id, "subscribed to project");
+        ServerMessage::SubscriptionConfirmed { endpoint_id } => {
+            tracing::info!(%endpoint_id, "subscribed to endpoint");
         }
-        ServerMessage::SubscriptionRemoved { project_id } => {
-            tracing::info!(%project_id, "unsubscribed from project");
+        ServerMessage::SubscriptionRemoved { endpoint_id } => {
+            tracing::info!(%endpoint_id, "unsubscribed from endpoint");
         }
         ServerMessage::Welcome { .. } | ServerMessage::Rejected { .. } => {}
     }

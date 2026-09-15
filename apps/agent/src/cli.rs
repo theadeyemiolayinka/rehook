@@ -11,6 +11,7 @@ use crate::config::AgentConfig;
 use crate::connection;
 use crate::credentials;
 use crate::db::LocalDb;
+use crate::state::ConnectionState;
 
 #[derive(Parser)]
 #[command(name = "hookrelay", version, about = "HookRelay local agent")]
@@ -28,10 +29,10 @@ enum Commands {
         /// Server base URL, e.g. http://localhost:8080
         #[arg(long)]
         server: String,
-        /// Agent ID (from the dashboard when the agent was created).
+        /// Agent ID (from the admin dashboard Agents page).
         #[arg(long)]
         agent_id: String,
-        /// Agent token (format hr_...). Required unless --create is used.
+        /// Agent token (format hr_...). Shown once when the agent is created.
         #[arg(long)]
         token: String,
         /// Friendly name for this agent.
@@ -50,14 +51,14 @@ enum Commands {
     },
     /// Show current configuration.
     Config,
-    /// Start the agent and connect to the server.
+    /// Start the agent connection loop only (no web UI).
     Start,
     /// Show recent local delivery history.
     History {
         #[arg(long, default_value = "20")]
         limit: i64,
     },
-    /// Start the local agent web UI. Binds to localhost only.
+    /// Start the local agent web UI and connection loop. Binds to localhost only.
     Web {
         /// Port to bind the web UI to.
         #[arg(long, default_value = "8787")]
@@ -87,13 +88,13 @@ enum TargetAction {
 
 #[derive(Subcommand)]
 enum RouteAction {
-    /// Route a project to a target.
+    /// Route an endpoint to a target. Use the endpoint ID from the admin dashboard.
     Add {
-        project_id: String,
+        endpoint_id: String,
         target_id: String,
     },
     /// Remove a route.
-    Remove { project_id: String },
+    Remove { endpoint_id: String },
     /// List routes.
     List,
 }
@@ -154,8 +155,13 @@ async fn login(server: &str, agent_id: &str, token: &str, name: &str) -> Result<
 
     println!("logged in to {server} as agent {name}");
     println!("agent id: {agent_uuid}");
-    println!("configure targets with: hookrelay target add <id> <url>");
-    println!("then start with: hookrelay start");
+    println!();
+    println!("next steps:");
+    println!("  1. Add a local target:  hookrelay target add myapp http://localhost:8000/webhook");
+    println!("  2. Route an endpoint:  hookrelay route add <endpoint-id> myapp");
+    println!("  3. Start the agent:     hookrelay web");
+    println!();
+    println!("or open the web UI with 'hookrelay web' to configure targets and routes visually.");
     Ok(())
 }
 
@@ -190,29 +196,32 @@ fn route(action: RouteAction) -> Result<()> {
     let mut config = AgentConfig::load()?;
     match action {
         RouteAction::Add {
-            project_id,
+            endpoint_id,
             target_id,
         } => {
             if !config.targets.contains_key(&target_id) {
                 return Err(anyhow!("unknown target {target_id}; add it first"));
             }
             config
-                .project_targets
-                .insert(project_id.clone(), target_id.clone());
+                .endpoint_targets
+                .insert(endpoint_id.clone(), target_id.clone());
             config.save()?;
-            println!("route {project_id} -> {target_id}");
+            println!("route {endpoint_id} -> {target_id}");
         }
-        RouteAction::Remove { project_id } => {
-            config.project_targets.remove(&project_id);
+        RouteAction::Remove { endpoint_id } => {
+            config.endpoint_targets.remove(&endpoint_id);
             config.save()?;
-            println!("removed route for {project_id}");
+            println!("removed route for {endpoint_id}");
         }
         RouteAction::List => {
-            if config.project_targets.is_empty() {
+            if config.endpoint_targets.is_empty() {
                 println!("no routes configured");
+                println!();
+                println!("add a route with: hookrelay route add <endpoint-id> <target-id>");
             } else {
-                for (pid, tid) in &config.project_targets {
-                    println!("{pid}\t{tid}");
+                println!("endpoint_id\ttarget_id");
+                for (eid, tid) in &config.endpoint_targets {
+                    println!("{eid}\t{tid}");
                 }
             }
         }
@@ -231,9 +240,9 @@ fn show_config() -> Result<()> {
         println!("  {id} -> {url}");
     }
     println!();
-    println!("routes:");
-    for (pid, tid) in &config.project_targets {
-        println!("  {pid} -> {tid}");
+    println!("routes (endpoint -> target):");
+    for (eid, tid) in &config.endpoint_targets {
+        println!("  {eid} -> {tid}");
     }
     Ok(())
 }
@@ -257,7 +266,8 @@ async fn start() -> Result<()> {
     let db = Arc::new(LocalDb::open().await?);
     tracing::info!("local db opened");
 
-    connection::run(config, db).await
+    let conn_state = ConnectionState::new();
+    connection::run(db, conn_state).await
 }
 
 async fn history(limit: i64) -> Result<()> {

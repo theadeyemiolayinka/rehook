@@ -94,16 +94,17 @@ CREATE TABLE agents (
 
 CREATE INDEX idx_agents_token_hash ON agents(token_hash);
 
--- Agent subscriptions to projects. Delivery is only authorized for
--- subscribed agents.
+-- Agent subscriptions to endpoints. Delivery is only authorized for
+-- subscribed agents. Subscriptions are at the endpoint level so different
+-- endpoints in the same project can route to different local targets.
 CREATE TABLE agent_subscriptions (
     agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    endpoint_id TEXT NOT NULL REFERENCES endpoints(id) ON DELETE CASCADE,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (agent_id, project_id)
+    PRIMARY KEY (agent_id, endpoint_id)
 );
 
-CREATE INDEX idx_agent_subscriptions_project ON agent_subscriptions(project_id);
+CREATE INDEX idx_agent_subscriptions_endpoint ON agent_subscriptions(endpoint_id);
 
 -- Delivery attempts. Each replay creates a new row; the original event is
 -- never mutated.

@@ -2,37 +2,81 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  font-size: var(--text-xs);
+  font-size: 12px;
   font-weight: 500;
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-subtle);
+  padding: 2px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-tertiary);
   color: var(--text-secondary);
   line-height: 1.4;
   white-space: nowrap;
+  transition: color var(--duration-standard);
 }
 
-.badge-green {
-  color: var(--status-success);
+.badge-primary {
+  color: var(--accent);
   border-color: var(--accent-border);
   background: var(--accent-subtle);
 }
 
+.badge-success {
+  color: var(--success);
+  border-color: rgba(34, 197, 94, 0.2);
+  background: var(--bg-success-subtle);
+}
+
+.badge-warning {
+  color: var(--warning);
+  border-color: rgba(245, 158, 11, 0.2);
+  background: var(--bg-warning-subtle);
+}
+
+.badge-danger {
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.2);
+  background: var(--bg-danger-subtle);
+}
+
+.badge-info {
+  color: var(--info);
+  border-color: rgba(59, 130, 246, 0.2);
+  background: var(--bg-info-subtle);
+}
+
+.badge-outline {
+  color: var(--text-secondary);
+  border-color: var(--border-default);
+  background: transparent;
+}
+
+/* Backward-compatible tone aliases */
+.badge-neutral {
+  color: var(--text-secondary);
+  border-color: var(--border-subtle);
+  background: var(--bg-tertiary);
+}
+
+.badge-green {
+  color: var(--success);
+  border-color: rgba(34, 197, 94, 0.2);
+  background: var(--bg-success-subtle);
+}
+
 .badge-yellow {
-  color: var(--status-warning);
-  border-color: rgba(245, 166, 35, 0.35);
-  background: rgba(245, 166, 35, 0.12);
+  color: var(--warning);
+  border-color: rgba(245, 158, 11, 0.2);
+  background: var(--bg-warning-subtle);
 }
 
 .badge-red {
-  color: var(--status-error);
-  border-color: rgba(248, 113, 113, 0.35);
-  background: rgba(248, 113, 113, 0.12);
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.2);
+  background: var(--bg-danger-subtle);
 }
 
 .badge-blue {
-  color: var(--status-info);
-  border-color: rgba(96, 165, 250, 0.35);
-  background: rgba(96, 165, 250, 0.12);
+  color: var(--info);
+  border-color: rgba(59, 130, 246, 0.2);
+  background: var(--bg-info-subtle);
 }

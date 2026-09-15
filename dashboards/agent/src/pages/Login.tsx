@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api, ApiError, type LoginRequest } from '../lib/api';
+import { Logo } from '../components/Logo';
 
 export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
   const [server, setServer] = useState('');
@@ -35,26 +36,24 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
     <div className="login-page">
       <div className="login-card">
         <div className="login-brand">
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-            <path d="M8 10h6a4 4 0 0 1 4 4v0a4 4 0 0 1-4 4h-2" stroke="#e6e8ea" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <circle cx="22" cy="14" r="3" stroke="#4ade80" strokeWidth="2" fill="none"/>
-            <path d="M19 14h-1" stroke="#4ade80" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-          <span>HookRelay Agent</span>
+          <Logo size={28} withWordmark />
         </div>
 
-        <h1>Connect to a HookRelay Server</h1>
-        <p className="login-subtitle">
-          Enter your agent credentials. You can find the agent ID and token in the
-          admin dashboard when you create an agent.
-        </p>
+        <div className="login-heading">
+          <h1>Connect to a HookRelay server</h1>
+          <p className="login-subtitle">
+            Enter your agent credentials. The agent ID and token are shown in the
+            admin dashboard when you create an agent.
+          </p>
+        </div>
 
         {error && <div className="login-error">{error}</div>}
 
-        <form onSubmit={submit}>
+        <form onSubmit={submit} className="login-form">
           <div className="login-field">
-            <label>Server URL</label>
+            <label htmlFor="login-server">Server URL</label>
             <input
+              id="login-server"
               value={server}
               onChange={(e) => setServer(e.target.value)}
               placeholder="https://hooks.example.com"
@@ -63,8 +62,9 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
             />
           </div>
           <div className="login-field">
-            <label>Agent ID</label>
+            <label htmlFor="login-agent-id">Agent ID</label>
             <input
+              id="login-agent-id"
               value={agentId}
               onChange={(e) => setAgentId(e.target.value)}
               placeholder="550e8400-e29b-41d4-a716-446655440000"
@@ -72,8 +72,9 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
             />
           </div>
           <div className="login-field">
-            <label>Agent Token</label>
+            <label htmlFor="login-token">Agent token</label>
             <input
+              id="login-token"
               type="password"
               value={token}
               onChange={(e) => setToken(e.target.value)}
@@ -82,20 +83,26 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
             />
           </div>
           <div className="login-field">
-            <label>Agent Name (optional)</label>
+            <label htmlFor="login-name">Agent name (optional)</label>
             <input
+              id="login-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="my-laptop"
             />
           </div>
-          <button type="submit" className="btn btn-primary login-submit" disabled={loading}>
+          <button
+            type="submit"
+            className="btn btn-primary login-submit"
+            disabled={loading}
+          >
             {loading ? 'Connecting...' : 'Connect'}
           </button>
         </form>
 
         <div className="login-help">
-          <p>The token is stored securely in your OS keychain. It is never sent to the browser after login.</p>
+          The token is stored in your OS keychain. It is never sent to the
+          browser after login.
         </div>
       </div>
     </div>

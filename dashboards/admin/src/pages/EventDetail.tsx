@@ -1,54 +1,115 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api, type EventDetail, type Endpoint, type Project } from '../lib/api';
+import {
+  api,
+  ApiError,
+  type EventDetail,
+  type Endpoint,
+  type Project,
+  type Agent,
+  type DeliveryRow,
+} from '../lib/api';
 import { PageHeader } from '../components/PageHeader';
 import { EmptyState } from '../components/EmptyState';
 import { Loading } from '../components/Loading';
 import { Badge } from '../components/Badge';
+import { Button } from '../components/Button';
 import { CopyButton } from '../components/CopyButton';
 import { CodeViewer } from '../components/CodeViewer';
-import { decodeBase64, formatBytes, formatDateTime } from '../lib/format';
+import { Dialog } from '../components/Dialog';
+import { StatusIndicator } from '../components/StatusIndicator';
+import { useToast } from '../components/Toast';
+import { IconReplay, IconEye, IconEyeOff } from '../components/Icons';
+import { decodeBase64, formatBytes, formatDateTime, formatRelative } from '../lib/format';
 import './EventDetail.css';
 
 export function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [endpoint, setEndpoint] = useState<Endpoint | null>(null);
   const [project, setProject] = useState<Project | null>(null);
+  const [deliveries, setDeliveries] = useState<DeliveryRow[]>([]);
   const [unmasked, setUnmasked] = useState(false);
+  const [replayOpen, setReplayOpen] = useState(false);
 
-  useEffect(() => {
-    async function load() {
-      if (!id) return;
-      try {
-        const ev = await api.get<EventDetail>(`/api/events/${id}?unmasked=${unmasked}`);
-        setEvent(ev);
-        if (ev.endpoint_id) {
-          try {
-            const ep = await api.get<Endpoint>(`/api/endpoints/${ev.endpoint_id}`);
-            setEndpoint(ep);
-          } catch {
-            // endpoint may be deleted
-          }
+  const load = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const ev = await api.get<EventDetail>(
+        `/api/events/${id}?unmasked=${unmasked}`,
+      );
+      setEvent(ev);
+      if (ev.endpoint_id) {
+        try {
+          const ep = await api.get<Endpoint>(`/api/endpoints/${ev.endpoint_id}`);
+          setEndpoint(ep);
+        } catch {
+          setEndpoint(null);
         }
-        if (ev.project_id) {
-          try {
-            const p = await api.get<Project>(`/api/projects/${ev.project_id}`);
-            setProject(p);
-          } catch {
-            // ignore
-          }
-        }
-      } finally {
-        setLoading(false);
       }
+      if (ev.project_id) {
+        try {
+          const p = await api.get<Project>(`/api/projects/${ev.project_id}`);
+          setProject(p);
+        } catch {
+          setProject(null);
+        }
+      }
+      try {
+        const d = await api.get<{ deliveries: DeliveryRow[] }>(
+          `/api/events/${id}/deliveries`,
+        );
+        setDeliveries(d.deliveries);
+      } catch {
+        setDeliveries([]);
+      }
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Failed to load event');
+    } finally {
+      setLoading(false);
     }
-    load();
   }, [id, unmasked]);
 
-  if (loading) return <Loading />;
-  if (!event) return <EmptyState title="Event not found" />;
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (loading) {
+    return (
+      <div className="event-detail">
+        <PageHeader title="Event" />
+        <div className="event-detail-loading">
+          <Loading />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="event-detail">
+        <PageHeader title="Event" />
+        <EmptyState
+          title="Unable to load event"
+          description={error}
+          action={<Button onClick={load}>Retry</Button>}
+        />
+      </div>
+    );
+  }
+
+  if (!event) {
+    return (
+      <div className="event-detail">
+        <PageHeader title="Event" />
+        <EmptyState title="Event not found" />
+      </div>
+    );
+  }
 
   const body = event.body ? decodeBase64(event.body) : '';
 
@@ -59,8 +120,17 @@ export function EventDetail() {
         subtitle={
           <span className="event-detail-id">
             <code>{event.id}</code>
-            <CopyButton value={event.id} />
+            <CopyButton value={event.id} compact />
           </span>
+        }
+        actions={
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setReplayOpen(true)}
+          >
+            <IconReplay size={14} /> Replay
+          </Button>
         }
       />
 
@@ -70,13 +140,17 @@ export function EventDetail() {
           <dl className="kv-list">
             <div className="kv">
               <dt>Method</dt>
-              <dd><Badge tone="green">{event.request_method}</Badge></dd>
+              <dd>
+                <Badge tone="green">{event.request_method}</Badge>
+              </dd>
             </div>
             <div className="kv">
               <dt>Endpoint</dt>
               <dd>
                 {endpoint ? (
-                  <Link to={`/projects/${event.project_id}`}>{endpoint.name}</Link>
+                  <Link to={`/projects/${event.project_id}`}>
+                    {endpoint.name}
+                  </Link>
                 ) : (
                   <span className="text-tertiary">deleted</span>
                 )}
@@ -110,7 +184,9 @@ export function EventDetail() {
             </div>
             <div className="kv">
               <dt>Delivery state</dt>
-              <dd><Badge>{event.delivery_state}</Badge></dd>
+              <dd>
+                <Badge>{event.delivery_state}</Badge>
+              </dd>
             </div>
           </dl>
         </section>
@@ -119,22 +195,36 @@ export function EventDetail() {
           <div className="detail-section-head">
             <h2 className="detail-section-title">Headers</h2>
             <button
+              type="button"
               className="event-detail-toggle"
               onClick={() => setUnmasked((u) => !u)}
+              aria-pressed={unmasked}
             >
-              {unmasked ? 'Hide secrets' : 'Show secrets'}
+              {unmasked ? (
+                <>
+                  <IconEyeOff size={13} /> Hide secrets
+                </>
+              ) : (
+                <>
+                  <IconEye size={13} /> Show secrets
+                </>
+              )}
             </button>
           </div>
-          <div className="headers-list">
-            {Object.entries(event.headers).map(([k, v]) => (
-              <div className="header-row" key={k}>
-                <div className="header-name">{k}</div>
-                <div className="header-value">
-                  {Array.isArray(v) ? v.join(', ') : v}
+          {Object.keys(event.headers).length === 0 ? (
+            <EmptyState title="No headers" />
+          ) : (
+            <div className="headers-list">
+              {Object.entries(event.headers).map(([k, v]) => (
+                <div className="header-row" key={k}>
+                  <div className="header-name">{k}</div>
+                  <div className="header-value">
+                    {Array.isArray(v) ? v.join(', ') : v}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="detail-section">
@@ -148,12 +238,193 @@ export function EventDetail() {
 
         <section className="detail-section">
           <h2 className="detail-section-title">Deliveries</h2>
-          <EmptyState
-            title="No deliveries yet"
-            description="Connect a local agent and replay this event to deliver it locally."
-          />
+          {deliveries.length === 0 ? (
+            <EmptyState
+              title="No deliveries yet"
+              description="Replay this event to deliver it to a connected agent."
+            />
+          ) : (
+            <div className="deliveries-table-wrap">
+              <table className="deliveries-table">
+                <thead>
+                  <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">HTTP</th>
+                    <th scope="col">Duration</th>
+                    <th scope="col">Target</th>
+                    <th scope="col">Started</th>
+                    <th scope="col">Error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {deliveries.map((d) => (
+                    <tr key={d.id}>
+                      <td className="deliv-num">{d.attempt_number}</td>
+                      <td>
+                        <StatusIndicator
+                          state={deliveryState(d.status)}
+                          label={d.status}
+                        />
+                      </td>
+                      <td className="deliv-mono">
+                        {d.http_status ?? '-'}
+                      </td>
+                      <td className="deliv-mono">
+                        {d.duration_ms != null ? `${d.duration_ms}ms` : '-'}
+                      </td>
+                      <td className="deliv-mono deliv-target">
+                        {d.target_id}
+                      </td>
+                      <td className="deliv-mono">
+                        {formatRelative(d.started_at)}
+                      </td>
+                      <td className="deliv-error">
+                        {d.error_message ?? '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       </div>
+
+      <ReplayDialog
+        open={replayOpen}
+        eventId={event.id}
+        projectName={project?.name}
+        onClose={() => setReplayOpen(false)}
+        onDone={load}
+      />
     </div>
+  );
+}
+
+function deliveryState(
+  status: string,
+): 'connected' | 'failed' | 'pending' | 'delivered' {
+  if (status === 'delivered') return 'delivered';
+  if (status === 'failed') return 'failed';
+  return 'pending';
+}
+
+interface ReplayProps {
+  open: boolean;
+  eventId: string;
+  projectName?: string;
+  onClose: () => void;
+  onDone: () => void;
+}
+
+function ReplayDialog({ open, eventId, onClose, onDone }: ReplayProps) {
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [agentId, setAgentId] = useState('');
+  const [targetId, setTargetId] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const toast = useToast();
+
+  useEffect(() => {
+    if (!open) return;
+    setAgentId('');
+    setTargetId('');
+    api
+      .get<{ agents: Agent[] }>('/api/agents')
+      .then((res) => {
+        const connected = res.agents.filter((a) => a.enabled && a.connected);
+        setAgents(connected);
+        if (connected.length === 1) setAgentId(connected[0].id);
+      })
+      .catch(() => setAgents([]));
+  }, [open]);
+
+  async function submit() {
+    if (!agentId || !targetId.trim()) return;
+    setSubmitting(true);
+    try {
+      await api.post(`/api/events/${eventId}/replay`, {
+        agent_id: agentId,
+        target_id: targetId.trim(),
+      });
+      toast.show('Replay dispatched', 'success');
+      onClose();
+      onDone();
+    } catch (e) {
+      toast.show(
+        e instanceof ApiError ? e.message : 'Replay failed',
+        'error',
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      title="Replay event"
+      description="Send this event to a connected agent for local delivery. The original event is not modified."
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={submit}
+            loading={submitting}
+            disabled={!agentId || !targetId.trim()}
+          >
+            Dispatch replay
+          </Button>
+        </>
+      }
+    >
+      {agents.length === 0 ? (
+        <div className="replay-no-agents">
+          No connected agents. Start the agent on your machine and ensure it is
+          subscribed to this project.
+        </div>
+      ) : (
+        <>
+          <div className="field">
+            <label className="field-label" htmlFor="replay-agent">
+              Agent
+            </label>
+            <select
+              id="replay-agent"
+              className="input"
+              value={agentId}
+              onChange={(e) => setAgentId(e.target.value)}
+            >
+              <option value="">Select an agent</option>
+              {agents.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor="replay-target">
+              Target ID
+            </label>
+            <input
+              id="replay-target"
+              className="input"
+              value={targetId}
+              onChange={(e) => setTargetId(e.target.value)}
+              placeholder="my-app"
+              autoFocus
+            />
+            <span className="field-hint">
+              The target must be configured in the agent allowlist.
+            </span>
+          </div>
+        </>
+      )}
+    </Dialog>
   );
 }

@@ -5,3 +5,4 @@ pub mod endpoints;
 pub mod events;
 pub mod projects;
 pub mod replay;
+pub mod settings;

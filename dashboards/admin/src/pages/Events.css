@@ -1,7 +1,13 @@
+.events-loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-8) 0;
+}
+
 .event-table {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--bg-secondary);
   overflow: hidden;
 }
 
@@ -12,22 +18,22 @@
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  font-size: var(--text-sm);
+  font-size: 14px;
 }
 
 .event-table-head {
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-subtle);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .event-table-row {
   border-bottom: 1px solid var(--border-subtle);
-  transition: background 0.1s;
+  transition: background var(--duration-standard);
 }
 
 .event-table-row:last-child {
@@ -35,12 +41,13 @@
 }
 
 .event-table-row:hover {
-  background: var(--bg-hover);
+  background: var(--bg-tertiary);
 }
 
 .et-endpoint,
 .et-project {
   font-weight: 500;
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -52,7 +59,7 @@
 
 .et-content-type {
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-size: 12px;
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -61,12 +68,13 @@
 
 .et-size {
   color: var(--text-tertiary);
-  font-size: var(--text-xs);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .et-time {
   color: var(--text-tertiary);
-  font-size: var(--text-xs);
+  font-size: 12px;
   text-align: right;
 }
 

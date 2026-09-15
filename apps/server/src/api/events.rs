@@ -26,6 +26,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/", get(list))
         .route("/:id", get(get_one).delete(delete_one))
         .route("/:id/body", get(get_body))
+        .route("/:id/deliveries", get(list_deliveries))
 }
 
 #[derive(Debug, Deserialize)]
@@ -183,4 +184,39 @@ async fn delete_one(
         return Err(ApiError::NotFound);
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// A delivery attempt row for the dashboard.
+#[derive(Debug, Serialize, sqlx::FromRow)]
+struct DeliveryRow {
+    id: String,
+    agent_id: String,
+    target_id: String,
+    attempt_number: i64,
+    status: String,
+    http_status: Option<i64>,
+    duration_ms: Option<i64>,
+    error_category: Option<String>,
+    error_message: Option<String>,
+    started_at: String,
+    completed_at: Option<String>,
+}
+
+/// List delivery attempts for an event. Used by the event detail view to show
+/// replay history. The original event is never mutated by replay.
+async fn list_deliveries(
+    State(state): State<Arc<AppState>>,
+    _session: AuthSession,
+    Path(id): Path<String>,
+) -> ApiResult<impl IntoResponse> {
+    let rows: Vec<DeliveryRow> = sqlx::query_as(
+        "SELECT id, agent_id, target_id, attempt_number, status, http_status,
+                duration_ms, error_category, error_message, started_at, completed_at
+         FROM deliveries WHERE event_id = ?
+         ORDER BY attempt_number ASC",
+    )
+    .bind(&id)
+    .fetch_all(&state.pool)
+    .await?;
+    Ok(Json(json!({ "deliveries": rows })))
 }

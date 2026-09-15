@@ -1,49 +1,67 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, type DbStats } from '../lib/api';
+import { ConfirmDialog } from '../components/Dialog';
+import { useToast } from '../components/Toast';
+import { IconRefresh, IconTrash, IconLogout } from '../components/Icons';
 
 export function Settings({ onLogout }: { onLogout: () => void }) {
-  const [stats, setStats] = useState<DbStats | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<DbStats | null>(null);
+  const [clearOpen, setClearOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const toast = useToast();
 
-  const load = async () => {
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const s = await api.get<DbStats>('/api/db/stats');
       setStats(s);
-      setError(null);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'failed to load stats');
+      setError(e instanceof ApiError ? e.message : 'Failed to load stats');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   const clearAll = async () => {
-    if (!confirm(
-      'This will permanently delete all locally stored events and delivery records.\n\n' +
-      'This action cannot be undone.\n\n' +
-      'Continue?'
-    )) return;
     setClearing(true);
     try {
       await api.delete('/api/db/clear');
+      toast.show('Local database cleared', 'success');
+      setClearOpen(false);
       await load();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'failed to clear data');
+      toast.show(
+        e instanceof ApiError ? e.message : 'Failed to clear data',
+        'error',
+      );
     } finally {
       setClearing(false);
     }
   };
 
   const logout = async () => {
-    if (!confirm('Sign out and delete stored credentials?')) return;
+    setLoggingOut(true);
     try {
       await api.post('/api/auth/logout');
+      toast.show('Signed out', 'success');
+      setLogoutOpen(false);
       onLogout();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'logout failed');
+      toast.show(
+        e instanceof ApiError ? e.message : 'Logout failed',
+        'error',
+      );
+    } finally {
+      setLoggingOut(false);
     }
   };
 
@@ -56,37 +74,56 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
   return (
     <div>
       <div className="page-header">
-        <h1>Settings</h1>
-        <p>Local database management and agent configuration</p>
+        <div className="page-header-row">
+          <div>
+            <h1>Settings</h1>
+            <p>Local database management and agent configuration.</p>
+          </div>
+          <button type="button" className="btn btn-sm" onClick={load}>
+            <IconRefresh size={14} /> Refresh
+          </button>
+        </div>
       </div>
 
-      {error && <div className="card toast toast-error">{error}</div>}
+      {error ? (
+        <div className="card error-card">
+          <div className="error-title">Unable to load settings</div>
+          <div className="error-detail">{error}</div>
+          <button className="btn btn-sm" onClick={load}>
+            Retry
+          </button>
+        </div>
+      ) : null}
 
       <div className="card">
-        <div className="card-title">Local Database</div>
-        <div className="status-row">
-          <span className="status-label">Delivery records</span>
-          <span className="status-value">{stats?.deliveries_count ?? 0}</span>
-        </div>
+        <div className="card-title">Local database</div>
         <div className="status-row">
           <span className="status-label">Stored events</span>
           <span className="status-value">{stats?.events_count ?? 0}</span>
         </div>
         <div className="status-row">
+          <span className="status-label">Delivery records</span>
+          <span className="status-value">{stats?.deliveries_count ?? 0}</span>
+        </div>
+        <div className="status-row">
           <span className="status-label">Database size</span>
-          <span className="status-value">{stats ? formatSize(stats.db_size_bytes) : '-'}</span>
+          <span className="status-value">
+            {stats ? formatSize(stats.db_size_bytes) : '-'}
+          </span>
         </div>
       </div>
 
       <div className="card">
-        <div className="card-title">Configuration Paths</div>
+        <div className="card-title">Configuration paths</div>
         <div className="status-row">
           <span className="status-label">Config file</span>
           <span className="status-value">~/.config/hookrelay/agent.json</span>
         </div>
         <div className="status-row">
           <span className="status-label">Token storage</span>
-          <span className="status-value">OS keychain (or ~/.config/hookrelay/token)</span>
+          <span className="status-value">
+            OS keychain (or ~/.config/hookrelay/token)
+          </span>
         </div>
         <div className="status-row">
           <span className="status-label">Local database</span>
@@ -94,27 +131,54 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-title">Danger Zone</div>
-        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 'var(--space-3)' }}>
-          Clearing the local database removes all stored events and delivery history.
-          This does not affect data on the server. The agent will continue running.
+      <div className="card danger-card">
+        <div className="card-title">Clear local database</div>
+        <p className="card-help">
+          Clearing the local database removes all stored events and delivery
+          history. This does not affect data on the server. The agent will
+          continue running.
         </p>
-        <button className="btn btn-danger" onClick={clearAll} disabled={clearing}>
-          {clearing ? 'Clearing...' : 'Clear Local Database'}
+        <button
+          className="btn btn-danger"
+          onClick={() => setClearOpen(true)}
+          disabled={clearing || loading}
+        >
+          <IconTrash size={14} /> Clear local database
         </button>
       </div>
 
-      <div className="card">
-        <div className="card-title">Sign Out</div>
-        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 'var(--space-3)' }}>
-          Sign out to delete the stored agent token from this machine. You will need
-          to log in again to reconnect to the server.
+      <div className="card danger-card">
+        <div className="card-title">Sign out</div>
+        <p className="card-help">
+          Sign out to delete the stored agent token from this machine. You will
+          need to log in again to reconnect to the server.
         </p>
-        <button className="btn btn-danger" onClick={logout}>
-          Sign Out
+        <button className="btn btn-danger" onClick={() => setLogoutOpen(true)}>
+          <IconLogout size={14} /> Sign out
         </button>
       </div>
+
+      <ConfirmDialog
+        open={clearOpen}
+        title="Clear local database"
+        description="Permanently delete all locally stored events and delivery records? This cannot be undone. Server data is not affected."
+        confirmLabel="Clear database"
+        destructive
+        loading={clearing}
+        onConfirm={clearAll}
+        onCancel={() => setClearOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={logoutOpen}
+        title="Sign out"
+        description="Delete stored credentials and disconnect the agent? You will need to log in again to reconnect."
+        confirmLabel="Sign out"
+        destructive
+        loading={loggingOut}
+        onConfirm={logout}
+        onCancel={() => setLogoutOpen(false)}
+      />
     </div>
   );
 }

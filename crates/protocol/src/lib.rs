@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 /// Protocol version. Bumped on incompatible changes. The server rejects
 /// agents advertising an unsupported major version.
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// Error category reported by the agent when a delivery fails.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,6 +61,10 @@ pub struct DeliveryInstruction {
     pub event_id: Uuid,
     /// The project the event belongs to.
     pub project_id: Uuid,
+    /// The endpoint the event was received on. Used by the agent to
+    /// resolve the correct local target when endpoint-level routing is
+    /// configured.
+    pub endpoint_id: Uuid,
     /// Identifier of the locally configured target. The agent resolves this
     /// to a URL from its own allowlist. The server never sends a URL.
     pub target_id: String,
@@ -94,17 +98,17 @@ pub enum ClientMessage {
     Authenticated,
     /// Heartbeat to keep the connection alive.
     Heartbeat { ts: chrono::DateTime<chrono::Utc> },
-    /// Subscribe to a project. The agent will only receive delivery
-    /// instructions for subscribed projects.
-    Subscribe { project_id: Uuid },
-    /// Unsubscribe from a project.
-    Unsubscribe { project_id: Uuid },
+    /// Subscribe to an endpoint. The agent will only receive delivery
+    /// instructions for subscribed endpoints.
+    Subscribe { endpoint_id: Uuid },
+    /// Unsubscribe from an endpoint.
+    Unsubscribe { endpoint_id: Uuid },
     /// Acknowledges a delivery instruction was received.
     DeliveryAccepted { delivery_id: Uuid },
     /// Reports the outcome of a delivery attempt.
     DeliveryOutcome(DeliveryOutcome),
     /// Rejects a delivery instruction (e.g. unknown target, unsupported
-    /// scheme, not subscribed to project).
+    /// scheme, not subscribed to endpoint).
     DeliveryRejected { delivery_id: Uuid, reason: String },
 }
 
@@ -125,10 +129,10 @@ pub enum ServerMessage {
         ts: chrono::DateTime<chrono::Utc>,
     },
     SubscriptionConfirmed {
-        project_id: Uuid,
+        endpoint_id: Uuid,
     },
     SubscriptionRemoved {
-        project_id: Uuid,
+        endpoint_id: Uuid,
     },
     /// Instructs the agent to deliver an event to a configured local target.
     Deliver(DeliveryInstruction),
@@ -197,6 +201,7 @@ mod tests {
             delivery_id: Uuid::new_v4(),
             event_id: Uuid::new_v4(),
             project_id: Uuid::new_v4(),
+            endpoint_id: Uuid::new_v4(),
             target_id: "paystack".into(),
             method: "POST".into(),
             content_type: Some("application/json".into()),
@@ -210,5 +215,15 @@ mod tests {
         let text = encode(&msg).unwrap();
         let back: ServerMessage = decode(&text).unwrap();
         assert!(matches!(back, ServerMessage::Deliver(_)));
+    }
+
+    #[test]
+    fn roundtrip_subscribe_endpoint() {
+        let msg = ClientMessage::Subscribe {
+            endpoint_id: Uuid::new_v4(),
+        };
+        let text = encode(&msg).unwrap();
+        let back: ClientMessage = decode(&text).unwrap();
+        assert!(matches!(back, ClientMessage::Subscribe { .. }));
     }
 }

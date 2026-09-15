@@ -26,13 +26,14 @@ pub fn router() -> Router<WebState> {
         .route("/targets", get(list_targets).post(add_target))
         .route("/targets/:id", delete(remove_target))
         .route("/routes", get(list_routes).post(add_route))
-        .route("/routes/:project_id", delete(remove_route))
+        .route("/routes/:endpoint_id", delete(remove_route))
         .route("/events", get(list_events))
         .route("/events/:id", get(get_event))
         .route("/events/:id/replay", post(replay_event))
         .route("/deliveries", get(list_deliveries))
         .route("/db/stats", get(db_stats))
         .route("/db/clear", delete(clear_db))
+        .route("/projects", get(list_projects))
 }
 
 /// Reload config from disk into state so changes from CLI or web UI are
@@ -91,6 +92,13 @@ async fn login(
     credentials::store_token(agent_uuid, req.token.trim())
         .map_err(|e| ApiError::Internal(format!("failed to store token: {e}")))?;
 
+    // Cache the token in memory so the connection loop does not need
+    // to hit the OS keychain (which prompts on macOS).
+    state
+        .conn_state
+        .set_token(req.token.trim().to_string())
+        .await;
+
     // Update config.
     let mut config = reload_config(&state)?;
     config.server_url = Some(req.server.trim().to_string());
@@ -115,6 +123,9 @@ async fn login(
 async fn logout(State(state): State<WebState>) -> Result<impl IntoResponse, ApiError> {
     credentials::delete_token().map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    // Clear the cached token so the connection loop stops trying.
+    state.conn_state.clear_token().await;
+
     let mut config = reload_config(&state)?;
     config.agent_id = None;
     config.server_url = None;
@@ -138,7 +149,7 @@ struct ConnectionStatusResponse {
     authenticated: bool,
     connected: bool,
     last_connected_at: Option<String>,
-    subscribed_projects: Vec<String>,
+    subscribed_endpoints: Vec<String>,
 }
 
 async fn status(State(state): State<WebState>) -> impl IntoResponse {
@@ -146,16 +157,16 @@ async fn status(State(state): State<WebState>) -> impl IntoResponse {
     let config = reload_config(&state).unwrap_or_else(|_| state.config.clone());
 
     let authenticated = config.agent_id.is_some();
+    let connected = state.conn_state.is_connected();
+    let last_connected_at = state.conn_state.last_connected().await;
     let status = ConnectionStatusResponse {
         server_url: config.server_url.clone(),
         agent_id: config.agent_id.map(|u| u.to_string()),
         agent_name: config.agent_name.clone(),
         authenticated,
-        // The web server does not know the live WebSocket state. It reports
-        // whether the agent is configured to connect.
-        connected: false,
-        last_connected_at: None,
-        subscribed_projects: config.project_targets.keys().cloned().collect(),
+        connected,
+        last_connected_at,
+        subscribed_endpoints: config.endpoint_targets.keys().cloned().collect(),
     };
     Json(json!(status))
 }
@@ -216,7 +227,7 @@ async fn remove_target(
         return Err(ApiError::NotFound);
     }
     // Also remove any routes pointing to this target.
-    config.project_targets.retain(|_, tid| tid != &id);
+    config.endpoint_targets.retain(|_, tid| tid != &id);
     config
         .save()
         .map_err(|e| ApiError::Internal(e.to_string()))?;
@@ -227,17 +238,17 @@ async fn remove_target(
 
 #[derive(Serialize)]
 struct RouteResponse {
-    project_id: String,
+    endpoint_id: String,
     target_id: String,
 }
 
 async fn list_routes(State(state): State<WebState>) -> impl IntoResponse {
     let config = reload_config(&state).unwrap_or_else(|_| state.config.clone());
     let routes: Vec<RouteResponse> = config
-        .project_targets
+        .endpoint_targets
         .iter()
-        .map(|(project_id, target_id)| RouteResponse {
-            project_id: project_id.clone(),
+        .map(|(endpoint_id, target_id)| RouteResponse {
+            endpoint_id: endpoint_id.clone(),
             target_id: target_id.clone(),
         })
         .collect();
@@ -246,7 +257,7 @@ async fn list_routes(State(state): State<WebState>) -> impl IntoResponse {
 
 #[derive(serde::Deserialize)]
 struct AddRouteRequest {
-    project_id: String,
+    endpoint_id: String,
     target_id: String,
 }
 
@@ -254,8 +265,8 @@ async fn add_route(
     State(state): State<WebState>,
     Json(req): Json<AddRouteRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    if req.project_id.trim().is_empty() {
-        return Err(ApiError::BadRequest("project_id is required".into()));
+    if req.endpoint_id.trim().is_empty() {
+        return Err(ApiError::BadRequest("endpoint_id is required".into()));
     }
     if req.target_id.trim().is_empty() {
         return Err(ApiError::BadRequest("target_id is required".into()));
@@ -271,12 +282,12 @@ async fn add_route(
         )));
     }
 
-    // Validate the project_id is a valid UUID.
-    uuid::Uuid::parse_str(req.project_id.trim())
-        .map_err(|e| ApiError::BadRequest(format!("invalid project_id: {e}")))?;
+    // Validate the endpoint_id is a valid UUID.
+    uuid::Uuid::parse_str(req.endpoint_id.trim())
+        .map_err(|e| ApiError::BadRequest(format!("invalid endpoint_id: {e}")))?;
 
-    config.project_targets.insert(
-        req.project_id.trim().to_string(),
+    config.endpoint_targets.insert(
+        req.endpoint_id.trim().to_string(),
         req.target_id.trim().to_string(),
     );
     config
@@ -284,7 +295,7 @@ async fn add_route(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     tracing::info!(
-        project = %req.project_id,
+        endpoint = %req.endpoint_id,
         target = %req.target_id,
         "route added via web UI"
     );
@@ -294,10 +305,10 @@ async fn add_route(
 
 async fn remove_route(
     State(state): State<WebState>,
-    Path(project_id): Path<String>,
+    Path(endpoint_id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let mut config = reload_config(&state)?;
-    if config.project_targets.remove(&project_id).is_none() {
+    if config.endpoint_targets.remove(&endpoint_id).is_none() {
         return Err(ApiError::NotFound);
     }
     config
@@ -412,6 +423,7 @@ async fn replay_event(
         delivery_id: uuid::Uuid::new_v4(),
         event_id: uuid::Uuid::parse_str(&event.id).unwrap_or_default(),
         project_id: uuid::Uuid::parse_str(&event.project_id).unwrap_or_default(),
+        endpoint_id: uuid::Uuid::parse_str(&event.endpoint_id).unwrap_or_default(),
         target_id: req.target_id.clone(),
         method: event.request_method.clone(),
         content_type: event.content_type.clone(),
@@ -518,6 +530,54 @@ async fn clear_db(State(state): State<WebState>) -> impl IntoResponse {
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": e.to_string() })),
         ),
+    }
+}
+
+// --- Project lookup ---
+
+/// Fetch project names from the server so the agent UI can display
+/// human-readable names instead of raw UUIDs. Uses the stored agent
+/// token for authentication.
+async fn list_projects(State(state): State<WebState>) -> axum::response::Response {
+    let config = reload_config(&state).unwrap_or_else(|_| state.config.clone());
+
+    let server_url = match config.server_url.as_deref() {
+        Some(s) => s.trim_end_matches('/').to_string(),
+        None => {
+            return Json(json!({ "projects": Vec::<serde_json::Value>::new() })).into_response();
+        }
+    };
+
+    let token = match state.conn_state.token().await {
+        Some(t) => t,
+        None => match credentials::load_token() {
+            Ok(t) => {
+                state.conn_state.set_token(t.clone()).await;
+                t
+            }
+            Err(_) => {
+                return Json(json!({ "projects": Vec::<serde_json::Value>::new() }))
+                    .into_response();
+            }
+        },
+    };
+
+    let url = format!("{server_url}/agent/projects");
+    let resp = reqwest::Client::new()
+        .get(&url)
+        .header("authorization", format!("Bearer {token}"))
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await;
+
+    match resp {
+        Ok(r) if r.status().is_success() => {
+            let body = r.text().await.unwrap_or_default();
+            let parsed: serde_json::Value =
+                serde_json::from_str(&body).unwrap_or(json!({ "projects": [] }));
+            Json(parsed).into_response()
+        }
+        _ => Json(json!({ "projects": Vec::<serde_json::Value>::new() })).into_response(),
     }
 }
 

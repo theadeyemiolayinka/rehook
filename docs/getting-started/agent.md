@@ -49,11 +49,19 @@ cargo build --release -p hookrelay-agent
 
 The binary is at `target/release/hookrelay`.
 
+## Concepts
+
+Before setting up the agent, understand these three concepts:
+
+- **Target**: A local HTTP destination on your machine (e.g. `http://localhost:8000/webhook`). You give each target a short ID like `myapp`. The agent only ever sends requests to URLs you configure here. The server never sends URLs.
+- **Endpoint**: An inbound webhook URL on your HookRelay server (e.g. a "paystack" endpoint in a "payments" project). Each endpoint has its own URL and can route to a different local target.
+- **Route**: A mapping from an endpoint to a target. When the server sends a delivery for an event on that endpoint, the agent uses the route to find the right local target and delivers there.
+
 ## Set up the agent
 
 ### Option A: Web UI (recommended)
 
-Start the web UI:
+Start the web UI and connection loop:
 
 ```bash
 hookrelay web
@@ -68,21 +76,16 @@ Enter the details from your server admin dashboard (Agents page):
 - **Agent Token**: the one-time token shown when you created the agent
 - **Agent Name**: a friendly name for this machine (optional)
 
-Click Connect. The agent validates the server and stores your credentials.
+Click Connect. The agent validates the server, stores your credentials, and connects automatically. You do not need to run a separate command.
 
-Then configure your local targets and routes from the same web UI:
+Then configure your local targets and routes:
 
-1. Go to the **Targets** page.
-2. Add a target (e.g. ID `myapp`, URL `http://localhost:8000/webhook`).
-3. Add a route: select your project and the target you just created.
+1. Go to the **Targets** page. Add a target (e.g. ID `myapp`, URL `http://localhost:8000/webhook`).
+2. Go to the **Routes** page. Click New route. Pick an endpoint from the dropdown (grouped by project) and connect it to the target you just created.
 
-That is it. The agent is now configured. Start the connection in a terminal:
+The agent subscribes to the endpoints you have routes for. When the server receives a webhook on one of those endpoints, it sends a delivery instruction to the agent, which resolves the target and delivers to your local application.
 
-```bash
-hookrelay start
-```
-
-The web UI shows your connection status, subscribed projects, and lets you inspect events and trigger replays.
+The Connection page shows your connection status and the endpoints you are subscribed to.
 
 ### Option B: Terminal
 
@@ -99,34 +102,38 @@ hookrelay login \
 # Add a local target
 hookrelay target add myapp http://localhost:8000/webhook
 
-# Map a project to the target
+# Map an endpoint to the target (use the endpoint ID from the admin dashboard)
 hookrelay route add 550e8400-e29b-41d4-a716-446655440000 myapp
 
-# Start the connection
-hookrelay start
+# Start the web UI and connection loop
+hookrelay web
 ```
 
 The web UI and terminal share the same configuration. Changes made in one are visible in the other.
 
-## Start the agent connection
+## How the connection works
 
-The WebSocket connection to the server is managed by the `start` command:
+`hookrelay web` starts both the local web UI and the WebSocket connection to the server. The agent:
 
-```bash
-hookrelay start
-```
+1. Connects outbound to the server.
+2. Authenticates with your agent ID and token.
+3. Subscribes to the endpoints you have routes for.
+4. Waits for delivery instructions from the server.
+5. Reconnects automatically if the connection drops.
 
-The agent connects to the server, subscribes to your configured projects, and waits for delivery instructions. It reconnects automatically if the connection drops.
+The token is loaded from the OS keychain.
 
-Keep this running in a terminal while you work. The web UI (`hookrelay web`) is for configuration and inspection. The `start` command is for the live connection.
+If you only want the connection loop without the web UI, use `hookrelay start` instead.
 
 ## What happens when you replay an event
 
 1. You trigger a replay from the admin dashboard or the agent web UI.
-2. The server sends a delivery instruction to the agent.
-3. The agent looks up the target in its local configuration.
-4. The agent delivers the webhook to your local application.
-5. The agent records the result locally.
+2. The server checks that the agent is subscribed to the event's endpoint.
+3. The server sends a delivery instruction containing the event data and a target ID.
+4. The agent looks up the target ID in its local configuration.
+5. The agent delivers the webhook to your local application.
+6. The agent records the result locally (status, duration, errors).
+7. The agent reports the outcome to the server (minimal metadata only, no response bodies).
 
 ## Inspect events and replay locally
 
@@ -137,15 +144,15 @@ Go to the History page to see delivery results: HTTP status, duration, and any e
 ## CLI reference
 
 ```
-hookrelay web                          # start the local web UI
-hookrelay login --server ... --agent-id ... --token ...
+hookrelay web                          # start the web UI and connection loop
+hookrelay start                        # start the connection loop only
+hookrelay login --server ... --agent-id ... --token ... [--name ...]
 hookrelay target add <id> <url>        # add a local target
 hookrelay target remove <id>
 hookrelay target list
-hookrelay route add <project-id> <target-id>
-hookrelay route remove <project-id>
+hookrelay route add <endpoint-id> <target-id>
+hookrelay route remove <endpoint-id>
 hookrelay route list
-hookrelay start                        # start the server connection
 hookrelay history                      # show recent deliveries
 hookrelay config                       # print current configuration
 hookrelay logout                       # delete stored credentials

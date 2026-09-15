@@ -1,76 +1,123 @@
 /* HookRelay dashboard styles.
  *
- * Design language: restrained, technical, calm. Neutral backgrounds, a single
- * restrained green accent for status and emphasis. No gradients, no
- * glassmorphism, no decorative blobs. Dense, professional typography.
+ * Design language follows the TAO Admin Dashboard Specification:
+ * pure neutral gray surfaces, four-tier text hierarchy, three-tier borders,
+ * restrained green accent used as punctuation, neutral focus rings.
+ * Dark mode is primary. No gradients, no glassmorphism, no decorative blobs.
  */
 
 :root {
-  /* Neutral scale */
-  --bg: #0b0d0e;
-  --bg-elevated: #131618;
-  --bg-subtle: #1a1e21;
-  --bg-hover: #202529;
-  --border: #262b2f;
-  --border-subtle: #1e2226;
+  /* Surfaces: pure neutral gray luminance ramp */
+  --bg-base: #0a0a0b;
+  --bg-primary: #111113;
+  --bg-secondary: #18181b;
+  --bg-tertiary: #1f1f23;
+  --bg-elevated: #27272a;
+  --bg-overlay: rgba(0, 0, 0, 0.72);
 
-  /* Text */
-  --text: #e6e8ea;
-  --text-secondary: #9aa0a6;
-  --text-tertiary: #6b7178;
-  --text-inverse: #0b0d0e;
+  /* Text: four-tier hierarchy */
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-tertiary: #71717a;
+  --text-quaternary: #52525b;
+  --text-disabled: #52525b;
+  --text-inverse: #0a0a0b;
 
-  /* Accent (restrained green) */
+  /* Borders: three-tier */
+  --border-subtle: #27272a;
+  --border-default: #333336;
+  --border-strong: #444448;
+
+  /* Accent: restrained green, used as punctuation */
   --accent: #4ade80;
   --accent-hover: #5ee892;
-  --accent-subtle: rgba(74, 222, 128, 0.12);
-  --accent-border: rgba(74, 222, 128, 0.35);
+  --accent-active: #22c55e;
+  --accent-subtle: rgba(74, 222, 128, 0.08);
+  --accent-border: rgba(74, 222, 128, 0.30);
 
-  /* Status */
-  --status-success: #4ade80;
-  --status-warning: #f5a623;
-  --status-error: #f87171;
-  --status-pending: #9aa0a6;
-  --status-info: #60a5fa;
+  /* Focus ring: neutral gray, not accent */
+  --focus: #52525b;
+
+  /* Semantic colors */
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #3b82f6;
+
+  --bg-success-subtle: rgba(34, 197, 94, 0.08);
+  --bg-warning-subtle: rgba(245, 158, 11, 0.08);
+  --bg-danger-subtle: rgba(239, 68, 68, 0.08);
+  --bg-info-subtle: rgba(59, 130, 246, 0.08);
 
   /* Spacing scale */
+  --space-0: 2px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-  --space-7: 48px;
-  --space-8: 64px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 48px;
+  --space-9: 64px;
 
   /* Radii */
-  --radius-sm: 4px;
-  --radius: 6px;
-  --radius-lg: 8px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
 
   /* Typography */
-  --font-sans: 'Figtree', -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI',
+  --font-sans: 'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI',
     Roboto, Helvetica, Arial, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Menlo', 'Consolas', monospace;
+
+  /* Shadows: only for elevated content */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.16);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.28);
+  --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.36);
+
+  /* Layout */
+  --header-height: 56px;
+  --sidebar-width: 256px;
+
+  /* Animation durations */
+  --duration-micro: 100ms;
+  --duration-standard: 150ms;
+  --duration-layout: 250ms;
+  --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Backward-compatible aliases for existing component CSS that references
+   the old token names. These map old names to new tokens so we can migrate
+   components incrementally without breaking the build. */
+:root {
+  --bg: var(--bg-base);
+  --bg-hover: var(--bg-tertiary);
+  --border: var(--border-default);
+  --text: var(--text-primary);
+  --radius: var(--radius-md);
+  --shadow: var(--shadow-md);
+  --status-success: var(--success);
+  --status-warning: var(--warning);
+  --status-error: var(--danger);
+  --status-pending: var(--text-tertiary);
+  --status-info: var(--info);
   --text-xs: 12px;
   --text-sm: 13px;
   --text-base: 14px;
   --text-md: 15px;
-  --text-lg: 17px;
+  --text-lg: 18px;
   --text-xl: 20px;
   --text-2xl: 24px;
-
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-
-  --header-height: 52px;
-  --sidebar-width: 220px;
 }
 
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  border-color: var(--border-subtle);
 }
 
 html,
@@ -79,15 +126,19 @@ body,
   height: 100%;
 }
 
-body {
-  background: var(--bg);
-  color: var(--text);
+html {
   font-family: var(--font-sans);
-  font-size: var(--text-base);
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 23px;
+  letter-spacing: -0.006em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: 'cv11', 'ss01';
+}
+
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  min-height: 100vh;
 }
 
 a {
@@ -107,28 +158,40 @@ select {
 }
 
 ::selection {
-  background: var(--accent-subtle);
+  background: var(--accent-active);
+  color: #ffffff;
 }
 
-/* Focus ring */
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+/* Focus ring: neutral gray, not accent */
+*:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 5px;
-  border: 2px solid var(--bg);
+  background: var(--border-default);
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-tertiary);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

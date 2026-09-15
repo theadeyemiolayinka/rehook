@@ -106,3 +106,32 @@ export interface EventDetail {
   headers: Record<string, string | string[]>;
   body: string | null; // base64
 }
+
+export interface Agent {
+  id: string;
+  name: string;
+  enabled: boolean;
+  connected: boolean;
+  created_at: string;
+  updated_at: string;
+  last_seen_at: string | null;
+}
+
+export interface AgentWithToken extends Agent {
+  token: string;
+}
+
+export interface DeliveryRow {
+  id: string;
+  event_id: string;
+  agent_id: string;
+  target_id: string;
+  attempt_number: number;
+  status: string;
+  http_status: number | null;
+  duration_ms: number | null;
+  error_category: string | null;
+  error_message: string | null;
+  started_at: string;
+  completed_at: string | null;
+}

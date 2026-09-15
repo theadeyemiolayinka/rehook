@@ -24,6 +24,35 @@ docker compose up -d
 
 The server listens on plain HTTP. Use a reverse proxy (Caddy, Traefik, Cloudflare, Coolify, Dokploy) for TLS termination. Set `HOOKRELAY_PUBLIC_BASE_URL` to your HTTPS URL so the dashboard constructs correct webhook URLs.
 
+When configuring the reverse proxy, ensure all non-API, non-webhook paths are forwarded to the server. The server serves the dashboard as a single-page application: routes like `/settings` or `/events` do not correspond to static files and fall back to `index.html`. A reverse proxy that only forwards specific paths will break client-side routing.
+
+Example Caddyfile:
+
+```
+hooks.example.com {
+    reverse_proxy localhost:8080
+}
+```
+
+Example nginx configuration:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name hooks.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Do not use `try_files` with nginx. The server handles SPA fallback internally.
+
 ## Environment variables
 
 See the `.env.example` file in the repository root for all options. Required variables:

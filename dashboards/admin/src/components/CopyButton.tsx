@@ -5,10 +5,12 @@ import './CopyButton.css';
 interface Props {
   value: string;
   label?: string;
+  /** Render as a compact icon-only button. Defaults to false. */
+  compact?: boolean;
   className?: string;
 }
 
-export function CopyButton({ value, label, className = '' }: Props) {
+export function CopyButton({ value, label, compact = false, className = '' }: Props) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -24,11 +26,17 @@ export function CopyButton({ value, label, className = '' }: Props) {
   return (
     <button
       type="button"
-      className={`copy-btn ${className}`}
+      className={`copy-btn ${compact ? 'copy-btn-compact' : ''} ${className}`}
       onClick={handleCopy}
-      title="Copy"
+      title={copied ? 'Copied' : 'Copy'}
+      aria-label={copied ? 'Copied' : 'Copy'}
     >
-      {copied ? 'Copied' : label ?? 'Copy'}
+      {copied ? (
+        <span className="copy-btn-check" aria-hidden="true" />
+      ) : (
+        <span className="copy-btn-icon" aria-hidden="true" />
+      )}
+      {!compact && <span className="copy-btn-text">{copied ? 'Copied' : label ?? 'Copy'}</span>}
     </button>
   );
 }

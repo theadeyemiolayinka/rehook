@@ -57,7 +57,7 @@ async fn replay(
     .await?
     .ok_or(ApiError::NotFound)?;
 
-    // Verify the agent exists and is subscribed to the project.
+    // Verify the agent exists and is enabled.
     let agent_enabled: Option<bool> = sqlx::query_scalar("SELECT enabled FROM agents WHERE id = ?")
         .bind(&req.agent_id)
         .fetch_optional(&state.pool)
@@ -68,15 +68,15 @@ async fn replay(
     }
 
     let subscribed: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM agent_subscriptions WHERE agent_id = ? AND project_id = ?",
+        "SELECT COUNT(*) FROM agent_subscriptions WHERE agent_id = ? AND endpoint_id = ?",
     )
     .bind(&req.agent_id)
-    .bind(&event.project_id)
+    .bind(&event.endpoint_id)
     .fetch_one(&state.pool)
     .await?;
     if subscribed == 0 {
         return Err(ApiError::BadRequest(
-            "agent is not subscribed to this project".into(),
+            "agent is not subscribed to this endpoint".into(),
         ));
     }
 
@@ -113,6 +113,7 @@ async fn replay(
         delivery_id,
         event_id: Uuid::parse_str(&event.id).unwrap_or_default(),
         project_id: Uuid::parse_str(&event.project_id).unwrap_or_default(),
+        endpoint_id: Uuid::parse_str(&event.endpoint_id).unwrap_or_default(),
         target_id: req.target_id,
         method: event.request_method,
         content_type: event.content_type,
@@ -121,10 +122,10 @@ async fn replay(
     };
 
     // Dispatch to the agent via the registry.
-    let project_uuid = Uuid::parse_str(&event.project_id).unwrap_or_default();
+    let endpoint_uuid = Uuid::parse_str(&event.endpoint_id).unwrap_or_default();
     match state
         .agents
-        .dispatch(agent_uuid, project_uuid, instruction)
+        .dispatch(agent_uuid, endpoint_uuid, instruction)
         .await
     {
         Ok(()) => {

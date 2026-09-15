@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, type User } from '../lib/api';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
+import { Logo } from '../components/Logo';
 import { useToast } from '../components/Toast';
 import './Login.css';
 
@@ -36,12 +37,11 @@ export function Login() {
     <div className="login-page">
       <form className="login-card" onSubmit={handleSubmit}>
         <div className="login-brand">
-          <span className="login-mark" />
-          HookRelay
+          <Logo size={28} withWordmark />
         </div>
         <div className="login-heading">
           <h1>Sign in</h1>
-          <p>Authenticate to manage your webhook projects.</p>
+          <p>Server administration dashboard.</p>
         </div>
         <Input
           label="Username"
@@ -62,7 +62,12 @@ export function Login() {
           error={error || undefined}
           required
         />
-        <Button type="submit" variant="primary" loading={loading} className="login-submit">
+        <Button
+          type="submit"
+          variant="primary"
+          loading={loading}
+          className="login-submit"
+        >
           Sign in
         </Button>
       </form>

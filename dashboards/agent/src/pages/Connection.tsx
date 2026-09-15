@@ -1,4 +1,8 @@
-import { api, ApiError, type ConnectionStatus } from '../lib/api';
+import { useEffect, useState } from 'react';
+import { api, ApiError, type ConnectionStatus, type ServerProject } from '../lib/api';
+import { ConfirmDialog } from '../components/Dialog';
+import { useToast } from '../components/Toast';
+import { IconRefresh, IconLogout } from '../components/Icons';
 
 export function Connection({
   status,
@@ -7,35 +11,77 @@ export function Connection({
   status: ConnectionStatus | null;
   onRefresh: () => void;
 }) {
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [endpoints, setEndpoints] = useState<Record<string, { name: string; projectName: string }>>({});
+  const toast = useToast();
+
+  useEffect(() => {
+    api.get<{ projects: ServerProject[] }>('/api/projects')
+      .then((res) => {
+        const map: Record<string, { name: string; projectName: string }> = {};
+        for (const p of res.projects ?? []) {
+          for (const e of p.endpoints ?? []) {
+            map[e.id] = { name: e.name, projectName: p.name };
+          }
+        }
+        setEndpoints(map);
+      })
+      .catch(() => setEndpoints({}));
+  }, [status?.connected]);
+
   const logout = async () => {
-    if (!confirm('Sign out and delete stored credentials?')) return;
+    setLoggingOut(true);
     try {
       await api.post('/api/auth/logout');
+      toast.show('Signed out', 'success');
+      setLogoutOpen(false);
       onRefresh();
     } catch (e) {
-      alert(e instanceof ApiError ? e.message : 'logout failed');
+      toast.show(
+        e instanceof ApiError ? e.message : 'Logout failed',
+        'error',
+      );
+    } finally {
+      setLoggingOut(false);
     }
   };
 
   return (
     <div>
       <div className="page-header">
-        <h1>Connection</h1>
-        <p>Server connection and agent identity</p>
+        <div className="page-header-row">
+          <div>
+            <h1>Connection</h1>
+            <p>Server connection and agent identity.</p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={onRefresh}
+          >
+            <IconRefresh size={14} /> Refresh
+          </button>
+        </div>
       </div>
 
       <div className="card">
         <div className="card-title">Server</div>
         <div className="status-row">
           <span className="status-label">Status</span>
-          <span className={`status-dot ${status?.connected ? 'connected' : 'disconnected'}`} />
+          <span
+            className={`status-dot ${status?.connected ? 'connected' : 'disconnected'}`}
+            aria-hidden="true"
+          />
           <span className="status-value">
             {status?.connected ? 'Connected' : 'Disconnected'}
           </span>
         </div>
         <div className="status-row">
           <span className="status-label">Server URL</span>
-          <span className="status-value">{status?.server_url ?? 'not configured'}</span>
+          <span className="status-value">
+            {status?.server_url ?? 'not configured'}
+          </span>
         </div>
         <div className="status-row">
           <span className="status-label">Authenticated</span>
@@ -52,43 +98,83 @@ export function Connection({
       </div>
 
       <div className="card">
-        <div className="card-title">Agent Identity</div>
+        <div className="card-title">Agent identity</div>
         <div className="status-row">
           <span className="status-label">Agent ID</span>
-          <span className="status-value">{status?.agent_id ?? 'not configured'}</span>
+          <span className="status-value mono">
+            {status?.agent_id ?? 'not configured'}
+          </span>
         </div>
         <div className="status-row">
           <span className="status-label">Agent name</span>
-          <span className="status-value">{status?.agent_name ?? 'not configured'}</span>
+          <span className="status-value">
+            {status?.agent_name ?? 'not configured'}
+          </span>
         </div>
       </div>
 
       <div className="card">
-        <div className="card-title">Subscribed Projects</div>
-        {status?.subscribed_projects && status.subscribed_projects.length > 0 ? (
-          <table className="table">
-            <tbody>
-              {status.subscribed_projects.map((pid) => (
-                <tr key={pid}>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>{pid}</td>
+        <div className="card-title">Subscribed endpoints</div>
+        {status?.subscribed_endpoints && status.subscribed_endpoints.length > 0 ? (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">Endpoint</th>
+                  <th scope="col">Endpoint ID</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {status.subscribed_endpoints.map((eid) => {
+                  const ep = endpoints[eid];
+                  return (
+                    <tr key={eid}>
+                      <td>
+                        {ep ? (
+                          <span>{ep.projectName} / {ep.name}</span>
+                        ) : (
+                          <span className="text-tertiary">unknown</span>
+                        )}
+                      </td>
+                      <td className="mono text-tertiary">{eid}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         ) : (
-          <div className="empty-state">No project subscriptions. Add routes in the Targets page.</div>
+          <div className="empty-state">
+            No endpoint subscriptions. Add routes in the Targets page to start
+            receiving events.
+          </div>
         )}
       </div>
 
       <div className="card">
         <div className="card-title">Session</div>
-        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 'var(--space-3)' }}>
-          Sign out to delete the stored agent token from this machine. You will need to log in again to reconnect.
+        <p className="card-help">
+          Sign out to delete the stored agent token from this machine. You will
+          need to log in again to reconnect.
         </p>
-        <button className="btn btn-danger" onClick={logout}>
-          Sign Out
+        <button
+          className="btn btn-danger"
+          onClick={() => setLogoutOpen(true)}
+        >
+          <IconLogout size={14} /> Sign out
         </button>
       </div>
+
+      <ConfirmDialog
+        open={logoutOpen}
+        title="Sign out"
+        description="Delete stored credentials and disconnect the agent? You will need to log in again to reconnect."
+        confirmLabel="Sign out"
+        destructive
+        loading={loggingOut}
+        onConfirm={logout}
+        onCancel={() => setLogoutOpen(false)}
+      />
     </div>
   );
 }

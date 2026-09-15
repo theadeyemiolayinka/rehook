@@ -1,3 +1,153 @@
-.agents {
-  /* placeholder */
+.agents-loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-8) 0;
+}
+
+.agents-table-wrap {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+
+.agents-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.agents-table thead th {
+  text-align: left;
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-tertiary);
+  white-space: nowrap;
+}
+
+.agents-table tbody td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+  color: var(--text-primary);
+}
+
+.agents-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.agents-table tbody tr {
+  transition: background var(--duration-standard);
+}
+
+.agents-table tbody tr:hover {
+  background: var(--bg-tertiary);
+}
+
+.agents-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.agents-muted {
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.agents-id {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.agents-id code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 1px var(--space-2);
+}
+
+.agents-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.agents-created {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.agents-created-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.agents-created-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  width: 64px;
+  flex-shrink: 0;
+}
+
+.agents-created-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  flex: 1;
+  min-width: 0;
+  word-break: break-all;
+}
+
+.agents-token {
+  color: var(--accent);
+}
+
+.agents-created-help {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: var(--space-1);
+}
+
+@media (max-width: 768px) {
+  .agents-table thead {
+    display: none;
+  }
+  .agents-table tbody tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-1) var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .agents-table tbody td {
+    border-bottom: none;
+    padding: 0;
+  }
+  .agents-table tbody td.agents-actions {
+    grid-column: 2;
+    text-align: right;
+  }
+  .agents-table tbody td.agents-id {
+    grid-column: 1 / -1;
+  }
+  .agents-table tbody tr:hover {
+    background: transparent;
+  }
 }

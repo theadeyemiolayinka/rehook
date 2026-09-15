@@ -57,7 +57,7 @@ export interface ConnectionStatus {
   authenticated: boolean;
   connected: boolean;
   last_connected_at: string | null;
-  subscribed_projects: string[];
+  subscribed_endpoints: string[];
 }
 
 export interface Target {
@@ -66,8 +66,20 @@ export interface Target {
 }
 
 export interface RouteEntry {
-  project_id: string;
+  endpoint_id: string;
   target_id: string;
+}
+
+export interface ServerEndpoint {
+  id: string;
+  name: string;
+}
+
+export interface ServerProject {
+  id: string;
+  name: string;
+  slug: string;
+  endpoints: ServerEndpoint[];
 }
 
 export interface DeliveryRecord {

@@ -46,15 +46,19 @@ The agent rejects these schemes:
 
 ## Routes
 
-A route maps a project to a target. When the server sends a delivery instruction for an event in a project, the agent uses the route to determine which target to deliver to.
+A route maps an endpoint to a target. When the server sends a delivery instruction for an event on that endpoint, the agent uses the route to determine which target to deliver to.
 
-From the web UI, go to the Targets page and add a route. Select the project ID and the target.
+Different endpoints in the same project can route to different targets. For example, in a "payments" project, you can route the "paystack" endpoint to one target and the "stripe" endpoint to another.
+
+From the web UI, go to the Routes page and click New route. Pick an endpoint from the dropdown (grouped by project) and connect it to a target.
 
 From the terminal:
 
 ```bash
-hookrelay route add <project-id> myapp
+hookrelay route add <endpoint-id> myapp
 ```
+
+Get the endpoint ID from the admin dashboard (Endpoints page).
 
 ## Removing a target
 

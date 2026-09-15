@@ -2,7 +2,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: var(--text-sm);
+  font-size: 13px;
   color: var(--text-secondary);
 }
 
@@ -10,7 +10,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--status-pending);
+  background: var(--text-tertiary);
   flex-shrink: 0;
 }
 
@@ -18,28 +18,27 @@
 .status-delivered .status-dot,
 .status-enabled .status-dot,
 .status-receiving .status-dot {
-  background: var(--status-success);
-  box-shadow: 0 0 0 2px var(--accent-subtle);
+  background: var(--success);
 }
 
 .status-connected,
 .status-delivered,
 .status-enabled,
 .status-receiving {
-  color: var(--status-success);
+  color: var(--text-primary);
 }
 
 .status-failed .status-dot {
-  background: var(--status-error);
+  background: var(--danger);
 }
 .status-failed {
-  color: var(--status-error);
+  color: var(--danger);
 }
 
 .status-disconnected .status-dot,
 .status-pending .status-dot,
 .status-disabled .status-dot {
-  background: var(--status-pending);
+  background: var(--text-tertiary);
 }
 
 .status-receiving .status-dot {

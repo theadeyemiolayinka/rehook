@@ -1,16 +1,29 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api, ApiError, type Target, type RouteEntry } from '../lib/api';
+import { Dialog, ConfirmDialog } from '../components/Dialog';
+import { useToast } from '../components/Toast';
+import { IconPlus, IconTrash, IconRefresh, IconRoute } from '../components/Icons';
 
 export function Targets() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [targets, setTargets] = useState<Target[]>([]);
   const [routes, setRoutes] = useState<RouteEntry[]>([]);
-  const [error, setError] = useState<string | null>(null);
+
+  const [addOpen, setAddOpen] = useState(false);
   const [newId, setNewId] = useState('');
   const [newUrl, setNewUrl] = useState('');
-  const [newProjectId, setNewProjectId] = useState('');
-  const [newTargetId, setNewTargetId] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const load = async () => {
+  const [removeTarget, setRemoveTarget] = useState<Target | null>(null);
+  const [removing, setRemoving] = useState(false);
+
+  const toast = useToast();
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const [targetsResp, routesResp] = await Promise.all([
         api.get<{ targets: Target[] }>('/api/targets'),
@@ -18,191 +31,220 @@ export function Targets() {
       ]);
       setTargets(targetsResp.targets);
       setRoutes(routesResp.routes);
-      setError(null);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'failed to load');
+      setError(e instanceof ApiError ? e.message : 'Failed to load');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
-  const addTarget = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const addTarget = async () => {
     if (!newId.trim() || !newUrl.trim()) return;
+    setSubmitting(true);
     try {
       await api.post('/api/targets', { id: newId.trim(), url: newUrl.trim() });
       setNewId('');
       setNewUrl('');
+      setAddOpen(false);
+      toast.show('Target added', 'success');
       await load();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'failed to add target');
+      toast.show(
+        e instanceof ApiError ? e.message : 'Failed to add target',
+        'error',
+      );
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const removeTarget = async (id: string) => {
-    if (!confirm(`Remove target "${id}"? Routes using this target will also be removed.`)) return;
+  const confirmRemove = async () => {
+    if (!removeTarget) return;
+    setRemoving(true);
     try {
-      await api.delete(`/api/targets/${encodeURIComponent(id)}`);
+      await api.delete(`/api/targets/${encodeURIComponent(removeTarget.id)}`);
+      toast.show('Target removed', 'success');
+      setRemoveTarget(null);
       await load();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'failed to remove target');
+      toast.show(
+        e instanceof ApiError ? e.message : 'Failed to remove target',
+        'error',
+      );
+    } finally {
+      setRemoving(false);
     }
   };
 
-  const addRoute = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newProjectId.trim() || !newTargetId.trim()) return;
-    try {
-      await api.post('/api/routes', {
-        project_id: newProjectId.trim(),
-        target_id: newTargetId.trim(),
-      });
-      setNewProjectId('');
-      setNewTargetId('');
-      await load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'failed to add route');
-    }
-  };
-
-  const removeRoute = async (projectId: string) => {
-    if (!confirm(`Remove route for project "${projectId}"?`)) return;
-    try {
-      await api.delete(`/api/routes/${encodeURIComponent(projectId)}`);
-      await load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'failed to remove route');
-    }
-  };
+  const routeCountFor = (targetId: string) =>
+    routes.filter((r) => r.target_id === targetId).length;
 
   return (
     <div>
       <div className="page-header">
-        <h1>Targets and Routes</h1>
-        <p>Local HTTP destinations and project-to-target mappings</p>
-      </div>
-
-      {error && <div className="card toast toast-error">{error}</div>}
-
-      <div className="card">
-        <div className="card-title">Add Target</div>
-        <form onSubmit={addTarget}>
-          <div className="form-row">
-            <div className="form-field">
-              <label>Target ID</label>
-              <input
-                value={newId}
-                onChange={(e) => setNewId(e.target.value)}
-                placeholder="myapp"
-              />
-            </div>
-            <div className="form-field">
-              <label>Local URL</label>
-              <input
-                value={newUrl}
-                onChange={(e) => setNewUrl(e.target.value)}
-                placeholder="http://localhost:8000/webhook"
-              />
-            </div>
-            <button type="submit" className="btn btn-primary">Add</button>
+        <div className="page-header-row">
+          <div>
+            <h1>Targets</h1>
+            <p>
+              Local HTTP destinations the agent can deliver webhooks to. Only
+              http and https URLs are allowed. The agent never accepts URLs
+              from the server; it only resolves target IDs you configure here.
+            </p>
           </div>
-        </form>
+          <div className="page-header-actions">
+            <button type="button" className="btn btn-sm" onClick={load}>
+              <IconRefresh size={14} /> Refresh
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              onClick={() => setAddOpen(true)}
+            >
+              <IconPlus size={14} /> New target
+            </button>
+          </div>
+        </div>
       </div>
 
+      {error ? (
+        <div className="card error-card">
+          <div className="error-title">Unable to load</div>
+          <div className="error-detail">{error}</div>
+          <button className="btn btn-sm" onClick={load}>
+            Retry
+          </button>
+        </div>
+      ) : null}
+
       <div className="card">
-        <div className="card-title">Configured Targets</div>
-        {targets.length === 0 ? (
-          <div className="empty-state">No targets configured</div>
+        {loading ? (
+          <div className="empty-state">Loading...</div>
+        ) : targets.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-title">No targets configured</div>
+            <div className="empty-detail">
+              A target is a local HTTP endpoint (like
+              <span className="mono"> http://localhost:8000/webhook</span>)
+              that will receive delivered webhooks. Add one to get started.
+            </div>
+          </div>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>URL</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {targets.map((t) => (
-                <tr key={t.id}>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>{t.id}</td>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>{t.url}</td>
-                  <td>
-                    <button className="btn btn-danger btn-sm" onClick={() => removeTarget(t.id)}>
-                      Remove
-                    </button>
-                  </td>
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">ID</th>
+                  <th scope="col">URL</th>
+                  <th scope="col">Routes</th>
+                  <th scope="col"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {targets.map((t) => {
+                  const count = routeCountFor(t.id);
+                  return (
+                    <tr key={t.id}>
+                      <td className="mono">{t.id}</td>
+                      <td className="mono">{t.url}</td>
+                      <td>
+                        {count > 0 ? (
+                          <Link to="/routes" className="link-badge">
+                            <IconRoute size={12} /> {count} route{count > 1 ? 's' : ''}
+                          </Link>
+                        ) : (
+                          <span className="text-tertiary">none</span>
+                        )}
+                      </td>
+                      <td className="row-action">
+                        <button
+                          className="icon-btn"
+                          onClick={() => setRemoveTarget(t)}
+                          aria-label={`Remove target ${t.id}`}
+                        >
+                          <IconTrash size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      <div className="card">
-        <div className="card-title">Add Route</div>
-        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 'var(--space-3)' }}>
-          A route maps a project to a target. When the server sends a delivery instruction
-          for an event in a project, the agent uses the route to determine which target to deliver to.
-        </p>
-        <form onSubmit={addRoute}>
-          <div className="form-row">
-            <div className="form-field">
-              <label>Project ID</label>
-              <input
-                value={newProjectId}
-                onChange={(e) => setNewProjectId(e.target.value)}
-                placeholder="550e8400-e29b-41d4-a716-446655440000"
-              />
-            </div>
-            <div className="form-field">
-              <label>Target ID</label>
-              <select
-                value={newTargetId}
-                onChange={(e) => setNewTargetId(e.target.value)}
-              >
-                <option value="">Select target...</option>
-                {targets.map((t) => (
-                  <option key={t.id} value={t.id}>{t.id}</option>
-                ))}
-              </select>
-            </div>
-            <button type="submit" className="btn btn-primary">Add Route</button>
-          </div>
-        </form>
-      </div>
+      <Dialog
+        open={addOpen}
+        title="New target"
+        description="A local HTTP destination the agent can deliver webhooks to. Only http and https URLs are allowed."
+        onClose={() => setAddOpen(false)}
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => setAddOpen(false)}
+              disabled={submitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              onClick={addTarget}
+              disabled={submitting || !newId.trim() || !newUrl.trim()}
+            >
+              {submitting ? 'Adding...' : 'Add target'}
+            </button>
+          </>
+        }
+      >
+        <div className="login-field">
+          <label htmlFor="target-id">Target ID</label>
+          <input
+            id="target-id"
+            value={newId}
+            onChange={(e) => setNewId(e.target.value)}
+            placeholder="myapp"
+            autoFocus
+          />
+          <span className="field-hint">
+            A short name you choose. Routes reference targets by this ID.
+          </span>
+        </div>
+        <div className="login-field">
+          <label htmlFor="target-url">Local URL</label>
+          <input
+            id="target-url"
+            value={newUrl}
+            onChange={(e) => setNewUrl(e.target.value)}
+            placeholder="http://localhost:8000/webhook"
+          />
+          <span className="field-hint">
+            The local application endpoint that will receive delivered
+            webhooks.
+          </span>
+        </div>
+      </Dialog>
 
-      <div className="card">
-        <div className="card-title">Configured Routes</div>
-        {routes.length === 0 ? (
-          <div className="empty-state">No routes configured</div>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Project ID</th>
-                <th>Target ID</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {routes.map((r) => (
-                <tr key={r.project_id}>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>{r.project_id}</td>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>{r.target_id}</td>
-                  <td>
-                    <button className="btn btn-danger btn-sm" onClick={() => removeRoute(r.project_id)}>
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <ConfirmDialog
+        open={!!removeTarget}
+        title="Remove target"
+        description={
+          removeTarget
+            ? `Remove target "${removeTarget.id}"? Routes using this target will also be removed.`
+            : ''
+        }
+        confirmLabel="Remove target"
+        destructive
+        loading={removing}
+        onConfirm={confirmRemove}
+        onCancel={() => setRemoveTarget(null)}
+      />
     </div>
   );
 }

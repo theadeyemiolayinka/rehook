@@ -85,6 +85,12 @@ impl Config {
             "./dashboards/admin/dist",
         )?);
 
+        // Safety: ServeDir serves files from this directory to any HTTP
+        // client. A misconfiguration pointing at a sensitive directory (the
+        // filesystem root, the data directory, or a path with parent
+        // traversal components) would expose files that should not be public.
+        validate_dashboard_dir(&dashboard_dir)?;
+
         Ok(Self {
             listen_addr,
             database_url,
@@ -112,4 +118,74 @@ impl Config {
 
 fn env_or(key: &str, default: &str) -> Result<String> {
     Ok(env::var(key).unwrap_or_else(|_| default.to_string()))
+}
+
+/// Validate the dashboard directory before it is passed to ServeDir.
+///
+/// ServeDir serves files from this directory to any HTTP client. A
+/// misconfiguration pointing at a sensitive directory (the filesystem root,
+/// the data directory, or a path with parent traversal components) would
+/// expose files that should not be public. This check runs at startup so
+/// the server fails fast instead of silently serving the wrong files.
+fn validate_dashboard_dir(dir: &std::path::Path) -> Result<()> {
+    // Reject parent traversal components. A canonical path is not used here
+    // because the directory may not exist yet in some dev setups; the
+    // component check is sufficient to catch the dangerous cases.
+    for component in dir.components() {
+        if let std::path::Component::ParentDir = component {
+            return Err(anyhow!(
+                "HOOKRELAY_DASHBOARD_DIR must not contain '..' components: {} \
+                 (this would risk exposing files outside the intended directory)",
+                dir.display()
+            ));
+        }
+    }
+
+    // Reject the filesystem root. Serving from root exposes the entire
+    // filesystem to any HTTP client.
+    let parent = dir.parent();
+    if parent.is_none() || dir.as_os_str().is_empty() {
+        return Err(anyhow!(
+            "HOOKRELAY_DASHBOARD_DIR must not be the filesystem root \
+             (this would expose the entire filesystem)"
+        ));
+    }
+
+    // Warn (but do not fail) if index.html is missing. This is common in dev
+    // when the dashboard has not been built yet, but in production it means
+    // the SPA will not load.
+    if !dir.join("index.html").exists() {
+        tracing::warn!(
+            "HOOKRELAY_DASHBOARD_DIR ({}) does not contain index.html. \
+             The dashboard will not load until the admin dashboard is built.",
+            dir.display()
+        );
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_dashboard_dir;
+    use std::path::PathBuf;
+
+    #[test]
+    fn rejects_parent_traversal() {
+        let dir = PathBuf::from("../../etc");
+        assert!(validate_dashboard_dir(&dir).is_err());
+    }
+
+    #[test]
+    fn rejects_root() {
+        let dir = PathBuf::from("/");
+        assert!(validate_dashboard_dir(&dir).is_err());
+    }
+
+    #[test]
+    fn accepts_normal_path() {
+        let dir = PathBuf::from("./dashboards/admin/dist");
+        // May warn about missing index.html but should not error.
+        assert!(validate_dashboard_dir(&dir).is_ok());
+    }
 }

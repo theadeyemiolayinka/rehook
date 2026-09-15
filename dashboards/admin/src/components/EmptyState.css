@@ -4,20 +4,21 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: var(--space-8) var(--space-5);
+  padding: var(--space-9) var(--space-6);
   gap: var(--space-3);
 }
 
 .empty-state-title {
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--text);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
 }
 
 .empty-state-desc {
-  font-size: var(--text-sm);
+  font-size: 14px;
   color: var(--text-secondary);
   max-width: 420px;
+  line-height: 1.45;
 }
 
 .empty-state-action {

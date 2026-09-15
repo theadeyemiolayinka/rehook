@@ -18,16 +18,23 @@ const SERVICE_NAME: &str = "hookrelay-agent";
 const KEYRING_USERNAME: &str = "agent-token";
 
 /// Store the agent token. Tries the keychain first, falls back to a file.
+/// On re-login, deletes the old keychain entry first to avoid "item
+/// already exists" errors on macOS.
 pub fn store_token(agent_id: Uuid, token: &str) -> Result<()> {
     // Try keychain. Fall back to file on any keychain error.
     let stored = match keyring::Entry::new(SERVICE_NAME, KEYRING_USERNAME) {
-        Ok(entry) => match entry.set_password(token) {
-            Ok(()) => true,
-            Err(e) => {
-                tracing::warn!("keychain store failed ({e}); falling back to plaintext file");
-                false
+        Ok(entry) => {
+            // Delete any existing entry first (macOS Keychain refuses
+            // to overwrite an existing item via set_password).
+            let _ = entry.delete_credential();
+            match entry.set_password(token) {
+                Ok(()) => true,
+                Err(e) => {
+                    tracing::warn!("keychain store failed ({e}); falling back to plaintext file");
+                    false
+                }
             }
-        },
+        }
         Err(_) => {
             tracing::warn!("OS keychain unavailable; falling back to plaintext file storage");
             false

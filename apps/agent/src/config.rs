@@ -20,9 +20,11 @@ pub struct AgentConfig {
     /// Map of target_id -> local URL. The agent only ever fetches these URLs.
     #[serde(default)]
     pub targets: HashMap<String, String>,
-    /// Map of project_id -> target_id for automatic delivery routing.
+    /// Map of endpoint_id -> target_id for delivery routing. Routing is at
+    /// the endpoint level so different endpoints in the same project can
+    /// route to different local targets.
     #[serde(default)]
-    pub project_targets: HashMap<String, String>,
+    pub endpoint_targets: HashMap<String, String>,
 }
 
 impl AgentConfig {

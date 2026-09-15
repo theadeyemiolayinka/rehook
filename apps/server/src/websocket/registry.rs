@@ -14,6 +14,7 @@ use uuid::Uuid;
 /// A connected agent's outbound channel and subscription state.
 struct ConnectedAgent {
     tx: mpsc::Sender<GatewayOutbound>,
+    /// Set of endpoint IDs the agent is subscribed to.
     subscriptions: std::collections::HashSet<Uuid>,
 }
 
@@ -58,41 +59,41 @@ impl AgentRegistry {
         agents.remove(&agent_id);
     }
 
-    /// Subscribe an agent to a project.
-    pub async fn subscribe(&self, agent_id: Uuid, project_id: Uuid) -> Result<(), String> {
+    /// Subscribe an agent to an endpoint.
+    pub async fn subscribe(&self, agent_id: Uuid, endpoint_id: Uuid) -> Result<(), String> {
         let mut agents = self.agents.lock().await;
         let Some(agent) = agents.get_mut(&agent_id) else {
             return Err("agent not connected".into());
         };
-        agent.subscriptions.insert(project_id);
+        agent.subscriptions.insert(endpoint_id);
         Ok(())
     }
 
-    /// Unsubscribe an agent from a project.
-    pub async fn unsubscribe(&self, agent_id: Uuid, project_id: Uuid) -> Result<(), String> {
+    /// Unsubscribe an agent from an endpoint.
+    pub async fn unsubscribe(&self, agent_id: Uuid, endpoint_id: Uuid) -> Result<(), String> {
         let mut agents = self.agents.lock().await;
         let Some(agent) = agents.get_mut(&agent_id) else {
             return Err("agent not connected".into());
         };
-        agent.subscriptions.remove(&project_id);
+        agent.subscriptions.remove(&endpoint_id);
         Ok(())
     }
 
     /// Send a delivery instruction to a connected agent, if it is subscribed to
-    /// the event's project. Returns Ok(()) if dispatched, Err with a reason
+    /// the event's endpoint. Returns Ok(()) if dispatched, Err with a reason
     /// otherwise.
     pub async fn dispatch(
         &self,
         agent_id: Uuid,
-        project_id: Uuid,
+        endpoint_id: Uuid,
         instruction: DeliveryInstruction,
     ) -> Result<(), String> {
         let mut agents = self.agents.lock().await;
         let Some(agent) = agents.get_mut(&agent_id) else {
             return Err("agent not connected".into());
         };
-        if !agent.subscriptions.contains(&project_id) {
-            return Err("agent not subscribed to project".into());
+        if !agent.subscriptions.contains(&endpoint_id) {
+            return Err("agent not subscribed to endpoint".into());
         }
         agent
             .tx
