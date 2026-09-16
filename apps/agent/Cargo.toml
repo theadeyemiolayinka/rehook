@@ -28,7 +28,7 @@ base64 = { workspace = true }
 url = "2"
 dirs = "5"
 sqlx = { workspace = true }
-keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native-sync-persistent"] }
+keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native-async-persistent", "crypto-rust"] }
 futures-util = "0.3"
 axum = { workspace = true }
 tower-http = { workspace = true }
