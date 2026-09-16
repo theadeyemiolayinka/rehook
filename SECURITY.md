@@ -39,14 +39,25 @@ Disabled and unknown endpoints respond identically to avoid leaking existence.
 
 ## Request handling
 
-- Bodies are bounded by `MAX_WEBHOOK_BODY_SIZE` and rejected before excessive
-  memory is consumed.
+- Bodies are bounded by `REHOOK_MAX_WEBHOOK_BODY_SIZE` and rejected before
+  excessive memory is consumed.
 - Rate limiting is scoped per route class (login, dashboard API, inbound
   endpoints, WebSocket).
 - Hop-by-hop headers and transport headers (`Host`, `Connection`,
   `Transfer-Encoding`, `Content-Length`, `Keep-Alive`, `Proxy-Authorization`,
-  `TE`, `Trailer`, `Upgrade`) are not replayed blindly.
+  `TE`, `Trailer`, `Upgrade`, `Accept-Encoding`) are not replayed blindly.
 - Sensitive headers may be masked in the dashboard.
+- Webhook signature and token comparisons are constant-time to avoid
+  timing side channels.
+
+## Response headers
+
+All responses carry `X-Content-Type-Options: nosniff`,
+`X-Frame-Options: DENY`, `Referrer-Policy`, `X-Robots-Tag` (noindex),
+a `Content-Security-Policy` restricted to the same origin, and a
+`Permissions-Policy` disabling unused browser features. When the public
+base URL is HTTPS, `Strict-Transport-Security` is also set. API responses
+carry `Cache-Control: no-store` so session-scoped data is never cached.
 
 ## Trusted proxy handling
 
@@ -88,11 +99,12 @@ external users. Production responses do not include stack traces.
 
 ## Dashboard static file serving
 
-The server serves the built admin dashboard from the directory configured by
-`REHOOK_DASHBOARD_DIR` (default: `./dashboards/admin/dist`). This directory
-is served to any HTTP client via `tower_http::services::ServeDir`.
+By default the dashboard assets are embedded in the `rehook-server` binary
+at compile time; no filesystem path is involved. If `REHOOK_DASHBOARD_DIR`
+is set, the server instead serves that directory to any HTTP client via
+`tower_http::services::ServeDir`.
 
-Misconfiguring this value is a security risk:
+Misconfiguring the override is a security risk:
 
 - Pointing it at the filesystem root would expose the entire filesystem.
 - Pointing it at the data directory would expose the SQLite database.
@@ -108,5 +120,15 @@ works correctly. Direct requests to dashboard routes like `/settings` or
 `/events` must reach the server, which serves `index.html` for any path that
 does not match a static file or API route.
 
-The agent web UI uses the same serving strategy for the agent dashboard, but
-binds to `127.0.0.1` only, so only the local machine can access it.
+The agent web UI uses the same serving strategy for the agent dashboard
+(embedded by default), but binds to `127.0.0.1` only, so only the local
+machine can access it.
+
+## Filesystem permissions
+
+- The server data directory is created with owner-only permissions (`0700`)
+  on Unix. It contains the SQLite database with webhook payloads, session
+  hashes, and agent token hashes.
+- The agent's data directory (`~/.local/share/rehook`) and config directory
+  (`~/.config/rehook`) are owner-only. The agent token is stored in the OS
+  keychain; the plaintext fallback file is `0600`.

@@ -1,6 +1,13 @@
 # Server Configuration
 
-All configuration is via environment variables. See `.env.example` for the full list.
+All configuration is via environment variables or command-line flags. Flags take precedence over the matching environment variable. See `.env.example` for the full list and `rehook-server --help` for the flags.
+
+| Flag | Environment variable |
+|---|---|
+| `--listen-addr` | `REHOOK_LISTEN_ADDR` |
+| `--public-base-url` | `REHOOK_PUBLIC_BASE_URL` |
+| `--data-dir` | `REHOOK_DATA_DIR` |
+| `--dashboard-dir` | `REHOOK_DASHBOARD_DIR` |
 
 ## Required
 
@@ -23,7 +30,7 @@ All configuration is via environment variables. See `.env.example` for the full 
 |---|---|---|
 | `REHOOK_DATA_DIR` | `./data` | Directory for SQLite database. |
 | `REHOOK_DATABASE_URL` | `sqlite:{data_dir}/rehook.db` | SQLite connection string. |
-| `REHOOK_DASHBOARD_DIR` | `./dashboards/admin/dist` | Directory containing built dashboard assets. |
+| `REHOOK_DASHBOARD_DIR` | unset (embedded) | Optional. Serve dashboard assets from a directory instead of the assets embedded in the binary. |
 
 ## Limits
 

@@ -1,8 +1,61 @@
 # Getting Started: Server
 
-The Rehook server receives webhooks, stores them, and serves the admin dashboard. It runs as a Docker container in production.
+The Rehook server receives webhooks, stores them, and serves the admin dashboard. It runs as a single binary or a Docker container.
 
-## Quick start with Docker Compose
+## Option A: Single binary
+
+The `rehook-server` binary is fully self-contained: the admin dashboard is embedded, and SQLite is the only storage. There are no runtime dependencies.
+
+### 1. Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/rehook/main/scripts/install-server.sh | bash
+```
+
+This verifies the release checksum, installs `rehook-server` to `/usr/local/bin` (or `~/.local/bin`), and creates a data directory (`/var/lib/rehook` as root, or `~/.local/share/rehook-server`).
+
+To install and enable a systemd service in one step, run as root:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/rehook/main/scripts/install-server.sh | sudo bash -s -- --systemd
+```
+
+This writes `/etc/rehook/env` with a generated `REHOOK_SESSION_KEY` and a hardened systemd unit, then reloads systemd. Edit `/etc/rehook/env` to set your public URL and admin credentials, then:
+
+```bash
+systemctl enable --now rehook-server
+```
+
+### 2. Configure
+
+Every setting has a flag and a matching environment variable. Flags take precedence.
+
+```bash
+rehook-server \
+  --listen-addr 0.0.0.0:8080 \
+  --data-dir /var/lib/rehook \
+  --public-base-url https://hooks.example.com
+```
+
+Equivalent environment variables:
+
+```bash
+export REHOOK_LISTEN_ADDR=0.0.0.0:8080
+export REHOOK_DATA_DIR=/var/lib/rehook
+export REHOOK_PUBLIC_BASE_URL=https://hooks.example.com
+export REHOOK_SESSION_KEY=$(openssl rand -hex 32)
+export ADMIN_USERNAME=admin
+export ADMIN_PASSWORD=change-me-to-a-strong-password
+rehook-server
+```
+
+`REHOOK_PUBLIC_BASE_URL` is the URL webhook providers use to reach this server. Set it to your public HTTPS domain; it is used to build the inbound URLs shown in the dashboard and to decide whether session cookies get the `Secure` flag.
+
+The admin credentials (`ADMIN_USERNAME`, `ADMIN_PASSWORD`) are read on first boot only and create the initial admin user. They are never read again after the user exists.
+
+Run `rehook-server --help` to see every option.
+
+## Option B: Docker Compose
 
 ### 1. Get the compose file
 

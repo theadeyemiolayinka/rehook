@@ -47,6 +47,16 @@ impl LocalDb {
             .ok_or_else(|| anyhow::anyhow!("could not determine data directory"))?
             .join("rehook");
         std::fs::create_dir_all(&dir).ok();
+        // The local db stores captured webhook bodies; keep it owner-only.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(meta) = std::fs::metadata(&dir) {
+                let mut perms = meta.permissions();
+                perms.set_mode(0o700);
+                std::fs::set_permissions(&dir, perms).ok();
+            }
+        }
         let path = dir.join("agent.db");
         let url = format!("sqlite:{}", path.display());
 

@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: rehook:latest
+    container_name: rehook-server
     ports:
       - "8080:8080"
     environment:
@@ -20,6 +22,9 @@ services:
       REHOOK_EVENT_RETENTION_DAYS: "14"
       RUST_LOG: "rehook=info,tower_http=info"
     volumes:
+      # SQLite database (events, sessions, agents). The named volume keeps
+      # data across rebuilds and restarts. To use a host path instead:
+      #   - ./data:/app/data
       - rehook-data:/app/data
     restart: unless-stopped
     healthcheck:

@@ -5,6 +5,36 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Context, Result};
+use clap::Parser;
+
+/// Command-line arguments for `rehook-server`. Each flag has a matching
+/// environment variable; the flag takes precedence.
+#[derive(Debug, Default, Parser)]
+#[command(
+    name = "rehook-server",
+    version,
+    about = "Rehook server: webhook capture, storage, and delivery dispatch"
+)]
+pub struct CliArgs {
+    /// Address to bind the HTTP server to.
+    #[arg(long, env = "REHOOK_LISTEN_ADDR")]
+    pub listen_addr: Option<SocketAddr>,
+
+    /// Public URL that webhook providers use to reach this server.
+    /// Displayed in the dashboard when copying inbound webhook URLs.
+    /// Set this to your public domain in production.
+    #[arg(long, env = "REHOOK_PUBLIC_BASE_URL")]
+    pub public_base_url: Option<String>,
+
+    /// Directory for the SQLite database and server data.
+    #[arg(long, env = "REHOOK_DATA_DIR")]
+    pub data_dir: Option<PathBuf>,
+
+    /// Serve dashboard assets from this directory instead of the
+    /// assets embedded in the binary.
+    #[arg(long, env = "REHOOK_DASHBOARD_DIR")]
+    pub dashboard_dir: Option<PathBuf>,
+}
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -21,24 +51,41 @@ pub struct Config {
     pub rust_log: String,
     pub admin_username: Option<String>,
     pub admin_password: Option<String>,
-    /// Directory containing the built dashboard assets. In dev this is
-    /// typically empty and Vite serves the dashboard on :5173.
-    pub dashboard_dir: PathBuf,
+    /// Directory containing built dashboard assets. When unset (the
+    /// default), the dashboard embedded into the binary is served instead.
+    /// Setting this overrides the embedded assets, e.g. to serve a
+    /// modified or locally built dashboard.
+    pub dashboard_dir: Option<PathBuf>,
 }
 
 impl Config {
-    pub fn from_env() -> Result<Self> {
-        let listen_addr: SocketAddr = env_or("REHOOK_LISTEN_ADDR", "0.0.0.0:8080")?
-            .parse()
-            .context("REHOOK_LISTEN_ADDR is not a valid socket address")?;
+    /// Load configuration from the parsed CLI args. Flags take precedence
+    /// over their matching environment variables; unset flags fall back to
+    /// env vars, then defaults.
+    pub fn from_args(args: CliArgs) -> Result<Self> {
+        let listen_addr: SocketAddr = match args.listen_addr {
+            Some(a) => a,
+            None => env_or("REHOOK_LISTEN_ADDR", "0.0.0.0:8080")?
+                .parse()
+                .context("REHOOK_LISTEN_ADDR is not a valid socket address")?,
+        };
 
-        let data_dir = PathBuf::from(env_or("REHOOK_DATA_DIR", "./data")?);
-        let database_url = env_or(
-            "REHOOK_DATABASE_URL",
-            &format!("sqlite:{}", data_dir.join("rehook.db").display()),
-        )?;
+        let data_dir = args.data_dir.unwrap_or_else(|| {
+            PathBuf::from(env_or("REHOOK_DATA_DIR", "./data").unwrap_or_default())
+        });
 
-        let public_base_url = env_or("REHOOK_PUBLIC_BASE_URL", "http://localhost:8080")?
+        // An explicit REHOOK_DATABASE_URL always wins. Otherwise the
+        // database lives at <data-dir>/rehook.db, so --data-dir alone is
+        // enough to relocate storage.
+        let database_url = match env::var("REHOOK_DATABASE_URL") {
+            Ok(u) if !u.is_empty() => u,
+            _ => format!("sqlite:{}", data_dir.join("rehook.db").display()),
+        };
+
+        let public_base_url = args
+            .public_base_url
+            .or_else(|| env::var("REHOOK_PUBLIC_BASE_URL").ok())
+            .unwrap_or_else(|| "http://localhost:8080".into())
             .trim_end_matches('/')
             .to_string();
 
@@ -80,14 +127,17 @@ impl Config {
             ));
         }
 
-        let dashboard_dir =
-            PathBuf::from(env_or("REHOOK_DASHBOARD_DIR", "./dashboards/admin/dist")?);
+        // Optional dashboard asset override. When unset, the assets embedded
+        // into the binary are served.
+        let dashboard_dir = args.dashboard_dir;
 
         // Safety: ServeDir serves files from this directory to any HTTP
         // client. A misconfiguration pointing at a sensitive directory (the
         // filesystem root, the data directory, or a path with parent
         // traversal components) would expose files that should not be public.
-        validate_dashboard_dir(&dashboard_dir)?;
+        if let Some(dir) = &dashboard_dir {
+            validate_dashboard_dir(dir)?;
+        }
 
         Ok(Self {
             listen_addr,
@@ -185,5 +235,61 @@ mod tests {
         let dir = PathBuf::from("./dashboards/admin/dist");
         // May warn about missing index.html but should not error.
         assert!(validate_dashboard_dir(&dir).is_ok());
+    }
+
+    #[test]
+    fn args_override_listen_addr() {
+        let args = super::CliArgs {
+            listen_addr: Some("127.0.0.1:9999".parse().unwrap()),
+            ..Default::default()
+        };
+        let config = super::Config::from_args(args).unwrap();
+        assert_eq!(config.listen_addr.port(), 9999);
+    }
+
+    #[test]
+    fn args_data_dir_derives_database_url() {
+        let args = super::CliArgs {
+            data_dir: Some(PathBuf::from("/tmp/rehook-test-cfg")),
+            ..Default::default()
+        };
+        // Ensure env does not leak an explicit database url into the test.
+        // If REHOOK_DATABASE_URL is set in the environment this test would
+        // be misleading; skip asserting in that case.
+        if std::env::var("REHOOK_DATABASE_URL").is_err() {
+            let config = super::Config::from_args(args).unwrap();
+            assert_eq!(config.database_url, "sqlite:/tmp/rehook-test-cfg/rehook.db");
+        }
+    }
+
+    #[test]
+    fn args_public_base_url_trims_trailing_slash() {
+        let args = super::CliArgs {
+            public_base_url: Some("https://hooks.example.com/".into()),
+            ..Default::default()
+        };
+        let config = super::Config::from_args(args).unwrap();
+        assert_eq!(config.public_base_url, "https://hooks.example.com");
+    }
+
+    #[test]
+    fn args_dashboard_dir_override() {
+        let args = super::CliArgs {
+            dashboard_dir: Some(PathBuf::from("./dashboards/admin/dist")),
+            ..Default::default()
+        };
+        let config = super::Config::from_args(args).unwrap();
+        assert_eq!(
+            config.dashboard_dir,
+            Some(PathBuf::from("./dashboards/admin/dist"))
+        );
+    }
+
+    #[test]
+    fn default_dashboard_dir_is_embedded() {
+        let config = super::Config::from_args(super::CliArgs::default()).unwrap();
+        if std::env::var("REHOOK_DASHBOARD_DIR").is_err() {
+            assert!(config.dashboard_dir.is_none());
+        }
     }
 }

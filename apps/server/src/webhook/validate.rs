@@ -12,6 +12,7 @@
 use axum::http::{HeaderMap, Uri};
 use hmac::{Hmac, Mac};
 use sha2::{Sha256, Sha512};
+use subtle::ConstantTimeEq;
 
 /// Result of webhook validation.
 pub enum ValidationResult {
@@ -73,7 +74,9 @@ pub fn validate(
                 _ => return ValidationResult::Failed("validation header not configured".into()),
             };
             match headers.get(header_name).and_then(|v| v.to_str().ok()) {
-                Some(v) if v == expected => ValidationResult::Ok,
+                Some(v) if constant_time_eq(v.as_bytes(), expected.as_bytes()) => {
+                    ValidationResult::Ok
+                }
                 Some(_) => ValidationResult::Failed("header token mismatch".into()),
                 None => ValidationResult::Failed(format!("missing header {header_name}")),
             }
@@ -91,13 +94,40 @@ pub fn validate(
             };
             let query = uri.query().unwrap_or("");
             match extract_query_param(query, param_name) {
-                Some(v) if v == expected => ValidationResult::Ok,
+                Some(v) if constant_time_eq(v.as_bytes(), expected.as_bytes()) => {
+                    ValidationResult::Ok
+                }
                 Some(_) => ValidationResult::Failed("query token mismatch".into()),
                 None => ValidationResult::Failed(format!("missing query param {param_name}")),
             }
         }
         _ => ValidationResult::Ok,
     }
+}
+
+/// Constant-time byte comparison. Lengths are folded into the result so a
+/// length difference does not short-circuit early.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    let len_ok = (a.len() as u64).ct_eq(&(b.len() as u64));
+    let max = a.len().max(b.len());
+    let mut diff = 0u8;
+    for i in 0..max {
+        let x = a.get(i).copied().unwrap_or(0);
+        let y = b.get(i).copied().unwrap_or(0);
+        diff |= x ^ y;
+    }
+    len_ok.into() && diff == 0
+}
+
+/// Decode a hex string (case-insensitive). Returns None on invalid input.
+fn hex_decode(s: &str) -> Option<Vec<u8>> {
+    if s.len() % 2 != 0 {
+        return None;
+    }
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(s.get(i..i + 2)?, 16).ok())
+        .collect()
 }
 
 /// Verify an HMAC-SHA256 signature. The expected header value may be a raw hex
@@ -109,15 +139,16 @@ fn verify_hmac_sha256(body: &[u8], secret: &str, expected: &str) -> ValidationRe
         Err(_) => return ValidationResult::Failed("invalid secret".into()),
     };
     mac.update(body);
-    let result = mac.finalize().into_bytes();
-    let hex = hex_encode(&result);
 
-    // Try both raw hex and "sha256=..." prefixed formats.
-    let clean = expected.trim_start_matches("sha256=");
-    if clean.eq_ignore_ascii_case(&hex) {
-        ValidationResult::Ok
-    } else {
-        ValidationResult::Failed("signature mismatch".into())
+    // Try both raw hex and "sha256=..." prefixed formats. The comparison is
+    // constant-time via verify_slice to avoid a timing side channel.
+    let clean = expected.trim().trim_start_matches("sha256=");
+    let Some(expected_bytes) = hex_decode(clean) else {
+        return ValidationResult::Failed("signature mismatch".into());
+    };
+    match mac.verify_slice(&expected_bytes) {
+        Ok(()) => ValidationResult::Ok,
+        Err(_) => ValidationResult::Failed("signature mismatch".into()),
     }
 }
 
@@ -129,14 +160,14 @@ fn verify_hmac_sha512(body: &[u8], secret: &str, expected: &str) -> ValidationRe
         Err(_) => return ValidationResult::Failed("invalid secret".into()),
     };
     mac.update(body);
-    let result = mac.finalize().into_bytes();
-    let hex = hex_encode(&result);
 
-    let clean = expected.trim_start_matches("sha512=");
-    if clean.eq_ignore_ascii_case(&hex) {
-        ValidationResult::Ok
-    } else {
-        ValidationResult::Failed("signature mismatch".into())
+    let clean = expected.trim().trim_start_matches("sha512=");
+    let Some(expected_bytes) = hex_decode(clean) else {
+        return ValidationResult::Failed("signature mismatch".into());
+    };
+    match mac.verify_slice(&expected_bytes) {
+        Ok(()) => ValidationResult::Ok,
+        Err(_) => ValidationResult::Failed("signature mismatch".into()),
     }
 }
 
@@ -153,6 +184,7 @@ fn extract_query_param<'a>(query: &'a str, name: &str) -> Option<&'a str> {
     None
 }
 
+#[cfg(test)]
 fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -210,6 +242,85 @@ mod tests {
     }
 
     #[test]
+    fn hmac_sha256_rejects_bad_signature() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-sig",
+            "0000000000000000000000000000000000000000000000000000000000000000"
+                .parse()
+                .unwrap(),
+        );
+        let uri: Uri = "/i/test".parse().unwrap();
+        let result = validate(
+            "hmac_sha256",
+            Some("mysecret"),
+            Some("x-sig"),
+            None,
+            &headers,
+            &uri,
+            b"hello world",
+        );
+        assert!(matches!(result, ValidationResult::Failed(_)));
+    }
+
+    #[test]
+    fn hmac_sha256_rejects_invalid_hex() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-sig", "not-hex!!!".parse().unwrap());
+        let uri: Uri = "/i/test".parse().unwrap();
+        let result = validate(
+            "hmac_sha256",
+            Some("mysecret"),
+            Some("x-sig"),
+            None,
+            &headers,
+            &uri,
+            b"hello world",
+        );
+        assert!(matches!(result, ValidationResult::Failed(_)));
+    }
+
+    #[test]
+    fn hmac_sha512_roundtrip() {
+        let body = b"payload";
+        let secret = "s3cret";
+        type HmacSha512 = Hmac<Sha512>;
+        let mut mac = <HmacSha512 as Mac>::new_from_slice(secret.as_bytes()).unwrap();
+        mac.update(body);
+        let expected = hex_encode(&mac.finalize().into_bytes());
+
+        let mut headers = HeaderMap::new();
+        headers.insert("x-sig", expected.parse().unwrap());
+        let uri: Uri = "/i/test".parse().unwrap();
+        let result = validate(
+            "hmac_sha512",
+            Some(secret),
+            Some("x-sig"),
+            None,
+            &headers,
+            &uri,
+            body,
+        );
+        assert!(matches!(result, ValidationResult::Ok));
+    }
+
+    #[test]
+    fn hmac_missing_header_fails() {
+        let headers = HeaderMap::new();
+        let uri: Uri = "/i/test".parse().unwrap();
+        let result = validate(
+            "hmac_sha256",
+            Some("mysecret"),
+            Some("x-sig"),
+            None,
+            &headers,
+            &uri,
+            b"body",
+        );
+        assert!(matches!(result, ValidationResult::Failed(_)));
+    }
+
+    #[test]
     fn header_token_match() {
         let mut headers = HeaderMap::new();
         headers.insert("x-token", "abc123".parse().unwrap());
@@ -224,6 +335,55 @@ mod tests {
             b"",
         );
         assert!(matches!(result, ValidationResult::Ok));
+    }
+
+    #[test]
+    fn header_token_mismatch() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-token", "wrong".parse().unwrap());
+        let uri: Uri = "/i/test".parse().unwrap();
+        let result = validate(
+            "header_token",
+            Some("abc123"),
+            Some("x-token"),
+            None,
+            &headers,
+            &uri,
+            b"",
+        );
+        assert!(matches!(result, ValidationResult::Failed(_)));
+    }
+
+    #[test]
+    fn query_token_mismatch() {
+        let headers = HeaderMap::new();
+        let uri: Uri = "/i/test?token=wrong".parse().unwrap();
+        let result = validate(
+            "query_token",
+            Some("abc123"),
+            None,
+            Some("token"),
+            &headers,
+            &uri,
+            b"",
+        );
+        assert!(matches!(result, ValidationResult::Failed(_)));
+    }
+
+    #[test]
+    fn query_token_missing() {
+        let headers = HeaderMap::new();
+        let uri: Uri = "/i/test".parse().unwrap();
+        let result = validate(
+            "query_token",
+            Some("abc123"),
+            None,
+            Some("token"),
+            &headers,
+            &uri,
+            b"",
+        );
+        assert!(matches!(result, ValidationResult::Failed(_)));
     }
 
     #[test]

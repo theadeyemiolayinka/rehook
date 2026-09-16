@@ -9,6 +9,7 @@
 //! credential. See SECURITY.md.
 
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
 use anyhow::{anyhow, Context, Result};
@@ -82,6 +83,15 @@ fn fallback_path() -> Result<std::path::PathBuf> {
         .ok_or_else(|| anyhow!("could not determine config directory"))?
         .join("rehook");
     fs::create_dir_all(&dir).ok();
+    // The token file lives here; keep the directory owner-only on Unix.
+    #[cfg(unix)]
+    {
+        if let Ok(meta) = fs::metadata(&dir) {
+            let mut perms = meta.permissions();
+            perms.set_mode(0o700);
+            fs::set_permissions(&dir, perms).ok();
+        }
+    }
     Ok(dir.join("token"))
 }
 
@@ -89,9 +99,12 @@ fn fallback_store(token: &str) -> Result<()> {
     let path = fallback_path()?;
     fs::write(&path, token).context("writing fallback token file")?;
     // Restrict to owner only.
-    let mut perms = fs::metadata(&path)?.permissions();
-    perms.set_mode(0o600);
-    fs::set_permissions(&path, perms).ok();
+    #[cfg(unix)]
+    {
+        let mut perms = fs::metadata(&path)?.permissions();
+        perms.set_mode(0o600);
+        fs::set_permissions(&path, perms).ok();
+    }
     Ok(())
 }
 

@@ -17,19 +17,15 @@ use anyhow::{Context, Result};
 use axum::Router;
 use tower_http::trace::TraceLayer;
 
-use crate::config::Config;
+use clap::Parser;
+
+use crate::config::{CliArgs, Config};
 use crate::state::AppState;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Handle --version early.
-    let args: Vec<String> = std::env::args().collect();
-    if args.iter().any(|a| a == "--version" || a == "-V") {
-        println!("rehook-server {}", env!("CARGO_PKG_VERSION"));
-        return Ok(());
-    }
-
-    let config = Config::from_env().context("loading configuration")?;
+    let args = CliArgs::parse();
+    let config = Config::from_args(args).context("loading configuration")?;
     init_tracing(&config);
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
@@ -60,7 +56,12 @@ async fn main() -> Result<()> {
 }
 
 fn build_router(state: Arc<AppState>) -> Router {
-    let router = http::routes::root(state).layer(TraceLayer::new_for_http());
+    let router = http::routes::root(state.clone())
+        .layer(axum::middleware::from_fn_with_state(
+            state,
+            http::headers::conditional_headers,
+        ))
+        .layer(TraceLayer::new_for_http());
     let mut router = router;
     for layer in http::headers::security_headers_layer() {
         router = router.layer(layer);

@@ -31,12 +31,22 @@ The server sends only a target identifier, never a URL. The agent resolves the i
 
 ### Server
 
+With Docker Compose:
+
 ```bash
 git clone https://github.com/theadeyemiolayinka/rehook.git
 cd rehook
 cp .env.example .env
 # Set ADMIN_PASSWORD and REHOOK_SESSION_KEY (openssl rand -hex 32)
 docker compose up -d
+```
+
+Or install the self-contained `rehook-server` binary (dashboard and SQLite included):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/rehook/main/scripts/install-server.sh | bash
+rehook-server --listen-addr 0.0.0.0:8080 --data-dir /var/lib/rehook \
+  --public-base-url https://hooks.example.com
 ```
 
 Open `http://localhost:8080` and sign in. Create a project, an endpoint, and an agent. Copy the agent ID and token.

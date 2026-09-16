@@ -8,12 +8,12 @@
 curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/rehook/main/scripts/install-agent.sh | bash
 ```
 
-Detects your platform, downloads the latest release from GitHub, and installs the `rehook` binary. Works on macOS (Intel and Apple Silicon) and Linux (x86_64 and ARM64).
+Detects your platform, downloads the latest release from GitHub, verifies the SHA-256 checksum (and the minisign signature when `minisign` is installed), and installs the `rehook` binary to `/usr/local/bin` or `~/.local/bin`. Works on macOS (Intel and Apple Silicon) and Linux (x86_64 and ARM64).
 
 ### Install a specific version
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/rehook/main/scripts/install-agent.sh | bash -s -- --version v0.1.0
+curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/rehook/main/scripts/install-agent.sh | bash -s -- --version v1.0.0
 ```
 
 ### Install to a custom directory

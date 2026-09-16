@@ -63,7 +63,8 @@ enum Commands {
         /// Port to bind the web UI to.
         #[arg(long, default_value = "8787")]
         port: u16,
-        /// Directory containing the built agent dashboard assets.
+        /// Serve dashboard assets from this directory instead of the
+        /// assets embedded in the binary.
         #[arg(long)]
         dashboard_dir: Option<String>,
     },

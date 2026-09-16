@@ -1,0 +1,29 @@
+# Build artifacts
+target/
+**/target/
+**/dist/
+**/node_modules/
+
+# Local data and env
+data/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.local
+.local/
+
+# VCS and editor
+.git/
+.gitignore
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Docs build output
+docs/.vitepress/dist
+docs/.vitepress/cache
+
+# CI
+.github/

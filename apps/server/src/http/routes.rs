@@ -40,7 +40,7 @@ pub fn root(state: Arc<AppState>) -> Router {
         )
         .layer(RequestBodyLimitLayer::new(max_body));
 
-    Router::new()
+    let router = Router::new()
         .route("/healthz", get(healthz))
         .route("/agent/projects", get(agent_projects))
         .merge(inbound)
@@ -57,17 +57,19 @@ pub fn root(state: Arc<AppState>) -> Router {
         .nest("/api/events", replay::router())
         .nest("/api/agents", agents::router())
         .nest("/api/settings", settings::router())
-        .with_state(state.clone())
-        // Serve the built dashboard. In dev, Vite handles this on :5173.
-        // In production, the dashboard dist is served here. The fallback to
-        // index.html enables client-side routing (React Router): requests to
-        // paths like /settings that do not match a static file fall back to
-        // index.html so the SPA can render the correct route.
-        .fallback_service(
-            ServeDir::new(&state.config.dashboard_dir).fallback(ServeFile::new(
-                state.config.dashboard_dir.join("index.html"),
-            )),
-        )
+        .with_state(state.clone());
+
+    // Serve the dashboard. By default the assets embedded into the binary
+    // are used; REHOOK_DASHBOARD_DIR overrides with a directory on disk.
+    // The fallback to index.html enables client-side routing (React
+    // Router): requests to paths like /settings that do not match a
+    // static file fall back to index.html so the SPA can render the
+    // correct route.
+    match &state.config.dashboard_dir {
+        Some(dir) => router
+            .fallback_service(ServeDir::new(dir).fallback(ServeFile::new(dir.join("index.html")))),
+        None => router.fallback(crate::http::dashboard::serve),
+    }
 }
 
 async fn healthz(State(_state): State<Arc<AppState>>) -> impl IntoResponse {

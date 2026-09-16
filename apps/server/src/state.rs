@@ -23,6 +23,8 @@ pub struct LoginRateLimiter {
 impl LoginRateLimiter {
     const MAX_ATTEMPTS: usize = 5;
     const WINDOW: Duration = Duration::from_secs(60);
+    /// Maximum distinct IPs tracked. Stale entries are pruned when hit.
+    const MAX_TRACKED_IPS: usize = 10_000;
 
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
@@ -48,6 +50,14 @@ impl LoginRateLimiter {
     pub async fn record_failure(&self, ip: IpAddr) {
         let mut attempts = self.attempts.lock().await;
         let now = Instant::now();
+
+        // Bound memory growth: a spray of failures from many distinct IPs
+        // would otherwise grow the map forever. When the cap is hit, drop
+        // all entries whose newest attempt is outside the window.
+        if attempts.len() >= Self::MAX_TRACKED_IPS && !attempts.contains_key(&ip) {
+            attempts.retain(|_, times| times.iter().any(|t| now.duration_since(*t) < Self::WINDOW));
+        }
+
         let times = attempts.entry(ip).or_default();
         times.retain(|t| now.duration_since(*t) < Self::WINDOW);
         times.push(now);
@@ -60,11 +70,98 @@ impl LoginRateLimiter {
     }
 }
 
+/// Restrict a data directory to owner-only access on Unix. The directory
+/// holds the SQLite database, which contains webhook payloads, session
+/// hashes, and agent token hashes. No-op on non-Unix platforms.
+#[cfg(unix)]
+fn restrict_dir_permissions(dir: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+    if let Ok(meta) = std::fs::metadata(dir) {
+        let mut perms = meta.permissions();
+        perms.set_mode(0o700);
+        let _ = std::fs::set_permissions(dir, perms);
+    }
+}
+
+#[cfg(not(unix))]
+fn restrict_dir_permissions(_dir: &std::path::Path) {}
+
 impl Default for LoginRateLimiter {
     fn default() -> Self {
         Self {
             attempts: Mutex::new(HashMap::new()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::Ipv4Addr;
+
+    #[tokio::test]
+    async fn blocks_after_max_attempts() {
+        let limiter = LoginRateLimiter::new();
+        let ip = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1));
+        for _ in 0..LoginRateLimiter::MAX_ATTEMPTS {
+            limiter.record_failure(ip).await;
+        }
+        assert!(limiter.is_blocked(ip).await);
+    }
+
+    #[tokio::test]
+    async fn allows_before_max_attempts() {
+        let limiter = LoginRateLimiter::new();
+        let ip = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2));
+        for _ in 0..LoginRateLimiter::MAX_ATTEMPTS - 1 {
+            limiter.record_failure(ip).await;
+        }
+        assert!(!limiter.is_blocked(ip).await);
+    }
+
+    #[tokio::test]
+    async fn clear_resets_attempts() {
+        let limiter = LoginRateLimiter::new();
+        let ip = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 3));
+        for _ in 0..LoginRateLimiter::MAX_ATTEMPTS {
+            limiter.record_failure(ip).await;
+        }
+        assert!(limiter.is_blocked(ip).await);
+        limiter.clear(ip).await;
+        assert!(!limiter.is_blocked(ip).await);
+    }
+
+    #[tokio::test]
+    async fn ips_are_tracked_independently() {
+        let limiter = LoginRateLimiter::new();
+        let a = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 4));
+        let b = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5));
+        for _ in 0..LoginRateLimiter::MAX_ATTEMPTS {
+            limiter.record_failure(a).await;
+        }
+        assert!(limiter.is_blocked(a).await);
+        assert!(!limiter.is_blocked(b).await);
+    }
+
+    #[tokio::test]
+    async fn stale_entries_are_pruned_at_cap() {
+        let limiter = LoginRateLimiter::new();
+        let mut attempts = limiter.attempts.lock().await;
+        // Fill the map with entries that are all outside the window.
+        let old = Instant::now() - Duration::from_secs(600);
+        for i in 0..LoginRateLimiter::MAX_TRACKED_IPS {
+            let ip = IpAddr::V4(Ipv4Addr::new(192, 0, (i / 256) as u8, (i % 256) as u8));
+            attempts.insert(ip, vec![old]);
+        }
+        drop(attempts);
+
+        // A new IP must still be tracked (not silently dropped).
+        let new_ip = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 1));
+        limiter.record_failure(new_ip).await;
+        let attempts = limiter.attempts.lock().await;
+        assert!(attempts.contains_key(&new_ip));
+        // Stale entries should have been pruned.
+        assert!(attempts.len() < LoginRateLimiter::MAX_TRACKED_IPS + 10);
     }
 }
 
@@ -82,6 +179,7 @@ impl AppState {
         // Ensure the data directory exists so SQLite can create the file.
         std::fs::create_dir_all(&config.data_dir)
             .with_context(|| format!("creating data dir {}", config.data_dir.display()))?;
+        restrict_dir_permissions(&config.data_dir);
 
         let opts: SqliteConnectOptions = config
             .database_url

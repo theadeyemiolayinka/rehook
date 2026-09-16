@@ -35,4 +35,8 @@ docs/.vitepress/cache
 # sqlx
 .sqlx/
 
+# minisign secret key
+.minisign/
+/minisign.key
+
 .local/

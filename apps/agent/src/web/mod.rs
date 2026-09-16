@@ -24,12 +24,19 @@ use crate::connection;
 use crate::db::LocalDb;
 use crate::state::ConnectionState;
 
+/// The compiled agent dashboard. The folder is relative to the crate
+/// manifest directory (`apps/agent`). In debug builds the files are read
+/// from disk so `cargo run` picks up rebuilds without recompiling.
+#[derive(rust_embed::RustEmbed)]
+#[folder = "../../dashboards/agent/dist"]
+struct AgentDashboard;
+
 /// Shared state for the web server.
 #[derive(Clone)]
 pub struct WebState {
     pub config: AgentConfig,
     pub db: Arc<LocalDb>,
-    pub dashboard_dir: PathBuf,
+    pub dashboard_dir: Option<PathBuf>,
     pub conn_state: ConnectionState,
 }
 
@@ -52,21 +59,10 @@ pub async fn run(port: u16, dashboard_dir: Option<PathBuf>) -> Result<()> {
         }
     });
 
-    let dashboard_dir = dashboard_dir.unwrap_or_else(|| {
-        // Default: look for the built agent dashboard relative to the
-        // working directory, then fall back to a system path.
-        let local = PathBuf::from("./dashboards/agent/dist");
-        if local.exists() {
-            local
-        } else {
-            PathBuf::from("/usr/local/share/rehook/agent-dashboard")
-        }
-    });
-
     let state = WebState {
         config,
         db,
-        dashboard_dir: dashboard_dir.clone(),
+        dashboard_dir,
         conn_state,
     };
 
@@ -103,12 +99,85 @@ pub async fn run(port: u16, dashboard_dir: Option<PathBuf>) -> Result<()> {
 fn build_router(state: WebState) -> Router {
     let api_router = api::router();
 
-    Router::new()
+    // Dashboard assets are embedded in the binary by default. The
+    // --dashboard-dir flag overrides with a directory on disk. The
+    // index.html fallback enables client-side routing.
+    let router = Router::new()
         .nest("/api", api_router)
         .with_state(state.clone())
-        .fallback_service(
-            ServeDir::new(&state.dashboard_dir)
-                .fallback(ServeFile::new(state.dashboard_dir.join("index.html"))),
+        .layer(TraceLayer::new_for_http());
+
+    match &state.dashboard_dir {
+        Some(dir) => router
+            .fallback_service(ServeDir::new(dir).fallback(ServeFile::new(dir.join("index.html")))),
+        None => router.fallback(serve_dashboard),
+    }
+}
+
+async fn serve_dashboard(uri: axum::http::Uri) -> axum::response::Response {
+    use axum::http::{header, HeaderValue, StatusCode};
+    use axum::response::IntoResponse;
+
+    let path = uri.path().trim_start_matches('/');
+    let path = if path.is_empty() { "index.html" } else { path };
+
+    let (served_path, file) = match AgentDashboard::get(path) {
+        Some(f) => (path, Some(f)),
+        None => ("index.html", AgentDashboard::get("index.html")),
+    };
+    match file {
+        Some(file) => {
+            let mut resp = axum::response::Response::new(file.data.to_vec().into());
+            let mime = mime_guess::from_path(served_path).first_or_octet_stream();
+            if let Ok(v) = HeaderValue::from_str(mime.as_ref()) {
+                resp.headers_mut().insert(header::CONTENT_TYPE, v);
+            }
+            if served_path.starts_with("assets/") {
+                resp.headers_mut().insert(
+                    header::CACHE_CONTROL,
+                    HeaderValue::from_static("public, max-age=31536000, immutable"),
+                );
+            }
+            resp
+        }
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "agent dashboard assets are not built; run `npm ci && npm run build` in dashboards/agent",
         )
-        .layer(TraceLayer::new_for_http())
+            .into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::serve_dashboard;
+    use axum::http::{header, StatusCode, Uri};
+
+    #[tokio::test]
+    async fn root_serves_index_or_hint() {
+        let uri: Uri = "/".parse().unwrap();
+        let resp = serve_dashboard(uri).await;
+        match resp.status() {
+            StatusCode::OK => assert_eq!(
+                resp.headers().get(header::CONTENT_TYPE).unwrap(),
+                "text/html"
+            ),
+            StatusCode::SERVICE_UNAVAILABLE => {}
+            other => panic!("unexpected status {other}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn spa_path_falls_back_to_index() {
+        let uri: Uri = "/targets".parse().unwrap();
+        let resp = serve_dashboard(uri).await;
+        match resp.status() {
+            StatusCode::OK => assert_eq!(
+                resp.headers().get(header::CONTENT_TYPE).unwrap(),
+                "text/html"
+            ),
+            StatusCode::SERVICE_UNAVAILABLE => {}
+            other => panic!("unexpected status {other}"),
+        }
+    }
 }

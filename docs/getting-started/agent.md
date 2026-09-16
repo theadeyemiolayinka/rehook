@@ -20,7 +20,7 @@ This detects your OS and architecture, downloads the latest release from GitHub,
 To install a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/rehook/main/scripts/install-agent.sh | bash -s -- --version v0.1.0
+curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/rehook/main/scripts/install-agent.sh | bash -s -- --version v1.0.0
 ```
 
 ### Update the agent
