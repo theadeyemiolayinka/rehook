@@ -110,7 +110,7 @@ See [Development Setup](docs/development/setup.md).
 
 ## Documentation
 
-Full documentation is available at https://theadeyemiolayinka.github.io/rehook/
+Full documentation is available at https://rehook.bytao.dev/
 
 ## Project status
 

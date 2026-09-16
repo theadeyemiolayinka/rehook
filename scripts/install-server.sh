@@ -214,4 +214,4 @@ else
 fi
 
 say ""
-say "Docs: https://theadeyemiolayinka.github.io/rehook/"
+say "Docs: https://rehook.bytao.dev/"

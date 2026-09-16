@@ -6,6 +6,13 @@ export default defineConfig({
   lang: 'en',
   cleanUrls: true,
   lastUpdated: true,
+  // Served at the apex of the custom domain (rehook.bytao.dev) via GitHub
+  // Pages. If the custom domain is ever removed, this must become
+  // '/rehook/' for the default github.io project path to work.
+  base: '/',
+  sitemap: {
+    hostname: 'https://rehook.bytao.dev',
+  },
 
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }],

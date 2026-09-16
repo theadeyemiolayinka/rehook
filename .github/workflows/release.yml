@@ -1,0 +1,132 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-24.04
+            platform: linux-x86_64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04
+            platform: linux-aarch64
+          - target: x86_64-apple-darwin
+            os: macos-14
+            platform: darwin-x86_64
+          - target: aarch64-apple-darwin
+            os: macos-14
+            platform: darwin-aarch64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install cross-compilation tools (Linux aarch64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu libsqlite3-dev pkg-config
+
+      - name: Install sqlite headers (Linux x86_64)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev pkg-config
+
+      - name: Build dashboards
+        run: |
+          cd dashboards/admin && npm ci && npm run build
+          cd ../agent && npm ci && npm run build
+
+      - name: Build binaries
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: |
+          cargo build --release --locked \
+            --target ${{ matrix.target }} \
+            -p rehook-server -p rehook-agent
+
+      - name: Package
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          PLATFORM="${{ matrix.platform }}"
+          BIN_DIR="target/${{ matrix.target }}/release"
+          mkdir -p dist
+          tar -czf "dist/rehook-${TAG}-${PLATFORM}.tar.gz" -C "${BIN_DIR}" rehook
+          tar -czf "dist/rehook-server-${TAG}-${PLATFORM}.tar.gz" -C "${BIN_DIR}" rehook-server
+          ls -la dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rehook-${{ matrix.platform }}
+          path: dist/
+
+  sign-and-release:
+    name: Sign and Create Release
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: rehook-*
+          merge-multiple: true
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y minisign coreutils
+
+      - name: Import minisign key
+        run: |
+          echo "${{ secrets.MINISIGN_SECRET_KEY }}" > minisign.key
+          echo "${{ secrets.MINISIGN_PUBLIC_KEY }}" > minisign.pub
+
+      - name: Sign and checksum
+        run: |
+          mkdir -p release
+          for pkg in artifacts/*.tar.gz; do
+            name=$(basename "$pkg")
+            cp "$pkg" "release/${name}"
+            (cd release && sha256sum "${name}" > "${name}.sha256")
+            echo "" | minisign -Sm "release/${name}" -s minisign.key -x "release/${name}.minisig"
+            minisign -Vm "release/${name}" -p minisign.pub -x "release/${name}.minisig"
+          done
+          ls -la release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: release/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
