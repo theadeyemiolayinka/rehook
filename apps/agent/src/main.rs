@@ -1,6 +1,6 @@
-//! HookRelay local agent.
+//! Rehook local agent.
 //!
-//! Connects outbound to a HookRelay server, subscribes to projects, and
+//! Connects outbound to a Rehook server, subscribes to projects, and
 //! delivers captured webhooks to explicitly configured local targets. The
 //! server never sends a URL; the agent resolves a target identifier to a
 //! locally configured, allowlisted destination and validates it before any

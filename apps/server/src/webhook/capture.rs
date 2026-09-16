@@ -333,7 +333,7 @@ mod tests {
             "content-length",
         ] {
             assert!(
-                hookrelay_protocol::HOP_BY_HOP_HEADERS.contains(&h),
+                rehook_protocol::HOP_BY_HOP_HEADERS.contains(&h),
                 "missing {h}"
             );
         }

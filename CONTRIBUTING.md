@@ -1,10 +1,10 @@
-# Contributing to HookRelay
+# Contributing to Rehook
 
-Thank you for your interest in contributing to HookRelay. This document covers the basics of getting set up and submitting changes.
+Thank you for your interest in contributing to Rehook. This document covers the basics of getting set up and submitting changes.
 
 ## Development setup
 
-See [docs/development/setup.md](docs/development/setup.md) for instructions on building and running HookRelay from source.
+See [docs/development/setup.md](docs/development/setup.md) for instructions on building and running Rehook from source.
 
 ## Before submitting a pull request
 

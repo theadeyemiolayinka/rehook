@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use futures_util::{SinkExt, StreamExt};
-use hookrelay_protocol::{encode, ClientMessage, ServerMessage, PROTOCOL_VERSION};
+use rehook_protocol::{encode, ClientMessage, ServerMessage, PROTOCOL_VERSION};
 use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
 
@@ -198,7 +198,7 @@ async fn connect_once(
         _ => return Err(anyhow::anyhow!("no welcome message")),
     };
 
-    match hookrelay_protocol::decode::<ServerMessage>(&first)? {
+    match rehook_protocol::decode::<ServerMessage>(&first)? {
         ServerMessage::Welcome { .. } => {
             tracing::info!("authenticated with server");
             conn_state.set_connected(true);
@@ -379,7 +379,7 @@ async fn handle_server_message(
         Message,
     >,
 ) -> Result<()> {
-    let msg: ServerMessage = hookrelay_protocol::decode(text)?;
+    let msg: ServerMessage = rehook_protocol::decode(text)?;
     match msg {
         ServerMessage::Deliver(instruction) => {
             tracing::info!(

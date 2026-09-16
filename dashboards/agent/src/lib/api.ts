@@ -1,4 +1,4 @@
-// API client for the HookRelay agent local API. Same-origin in production
+// API client for the Rehook agent local API. Same-origin in production
 // (served by the agent itself); proxied in dev.
 
 export class ApiError extends Error {

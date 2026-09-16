@@ -45,7 +45,7 @@ impl LocalDb {
     pub async fn open() -> Result<Self> {
         let dir = dirs::data_local_dir()
             .ok_or_else(|| anyhow::anyhow!("could not determine data directory"))?
-            .join("hookrelay");
+            .join("rehook");
         std::fs::create_dir_all(&dir).ok();
         let path = dir.join("agent.db");
         let url = format!("sqlite:{}", path.display());

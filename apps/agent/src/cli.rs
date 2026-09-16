@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
-use hookrelay_protocol::PROTOCOL_VERSION;
+use rehook_protocol::PROTOCOL_VERSION;
 use uuid::Uuid;
 
 use crate::config::AgentConfig;
@@ -14,7 +14,7 @@ use crate::db::LocalDb;
 use crate::state::ConnectionState;
 
 #[derive(Parser)]
-#[command(name = "hookrelay", version, about = "HookRelay local agent")]
+#[command(name = "rehook", version, about = "Rehook local agent")]
 pub struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -32,7 +32,7 @@ enum Commands {
         /// Agent ID (from the admin dashboard Agents page).
         #[arg(long)]
         agent_id: String,
-        /// Agent token (format hr_...). Shown once when the agent is created.
+        /// Agent token (format re_...). Shown once when the agent is created.
         #[arg(long)]
         token: String,
         /// Friendly name for this agent.
@@ -103,7 +103,7 @@ pub async fn run() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Commands::Version => {
-            println!("hookrelay agent {}", env!("CARGO_PKG_VERSION"));
+            println!("rehook agent {}", env!("CARGO_PKG_VERSION"));
             println!("protocol version {PROTOCOL_VERSION}");
             Ok(())
         }
@@ -157,11 +157,11 @@ async fn login(server: &str, agent_id: &str, token: &str, name: &str) -> Result<
     println!("agent id: {agent_uuid}");
     println!();
     println!("next steps:");
-    println!("  1. Add a local target:  hookrelay target add myapp http://localhost:8000/webhook");
-    println!("  2. Route an endpoint:  hookrelay route add <endpoint-id> myapp");
-    println!("  3. Start the agent:     hookrelay web");
+    println!("  1. Add a local target:  rehook target add myapp http://localhost:8000/webhook");
+    println!("  2. Route an endpoint:  rehook route add <endpoint-id> myapp");
+    println!("  3. Start the agent:     rehook web");
     println!();
-    println!("or open the web UI with 'hookrelay web' to configure targets and routes visually.");
+    println!("or open the web UI with 'rehook web' to configure targets and routes visually.");
     Ok(())
 }
 
@@ -217,7 +217,7 @@ fn route(action: RouteAction) -> Result<()> {
             if config.endpoint_targets.is_empty() {
                 println!("no routes configured");
                 println!();
-                println!("add a route with: hookrelay route add <endpoint-id> <target-id>");
+                println!("add a route with: rehook route add <endpoint-id> <target-id>");
             } else {
                 println!("endpoint_id\ttarget_id");
                 for (eid, tid) in &config.endpoint_targets {
@@ -250,16 +250,16 @@ fn show_config() -> Result<()> {
 async fn start() -> Result<()> {
     let config = AgentConfig::load()?;
     if config.server_url.is_none() {
-        return Err(anyhow!("not logged in; run `hookrelay login` first"));
+        return Err(anyhow!("not logged in; run `rehook login` first"));
     }
     if config.agent_id.is_none() {
-        return Err(anyhow!("not logged in; run `hookrelay login` first"));
+        return Err(anyhow!("not logged in; run `rehook login` first"));
     }
 
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "hookrelay=info".into()),
+                .unwrap_or_else(|_| "rehook=info".into()),
         )
         .init();
 
@@ -298,7 +298,7 @@ async fn web(port: u16, dashboard_dir: Option<String>) -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "hookrelay=info".into()),
+                .unwrap_or_else(|_| "rehook=info".into()),
         )
         .init();
 

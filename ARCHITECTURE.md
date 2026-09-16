@@ -1,6 +1,6 @@
 # Architecture
 
-HookRelay is a webhook capture, inspection, and local replay platform. It is
+Rehook is a webhook capture, inspection, and local replay platform. It is
 composed of three cooperating parts: a public server, a local agent, and a
 dashboard. The dashboard is served by the server from the same origin.
 

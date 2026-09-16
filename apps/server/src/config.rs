@@ -28,49 +28,49 @@ pub struct Config {
 
 impl Config {
     pub fn from_env() -> Result<Self> {
-        let listen_addr: SocketAddr = env_or("HOOKRELAY_LISTEN_ADDR", "0.0.0.0:8080")?
+        let listen_addr: SocketAddr = env_or("REHOOK_LISTEN_ADDR", "0.0.0.0:8080")?
             .parse()
-            .context("HOOKRELAY_LISTEN_ADDR is not a valid socket address")?;
+            .context("REHOOK_LISTEN_ADDR is not a valid socket address")?;
 
-        let data_dir = PathBuf::from(env_or("HOOKRELAY_DATA_DIR", "./data")?);
+        let data_dir = PathBuf::from(env_or("REHOOK_DATA_DIR", "./data")?);
         let database_url = env_or(
-            "HOOKRELAY_DATABASE_URL",
-            &format!("sqlite:{}", data_dir.join("hookrelay.db").display()),
+            "REHOOK_DATABASE_URL",
+            &format!("sqlite:{}", data_dir.join("rehook.db").display()),
         )?;
 
-        let public_base_url = env_or("HOOKRELAY_PUBLIC_BASE_URL", "http://localhost:8080")?
+        let public_base_url = env_or("REHOOK_PUBLIC_BASE_URL", "http://localhost:8080")?
             .trim_end_matches('/')
             .to_string();
 
-        let trusted_proxy_hops: usize = env_or("HOOKRELAY_TRUSTED_PROXY_HOPS", "0")?
+        let trusted_proxy_hops: usize = env_or("REHOOK_TRUSTED_PROXY_HOPS", "0")?
             .parse()
-            .context("HOOKRELAY_TRUSTED_PROXY_HOPS must be a non-negative integer")?;
+            .context("REHOOK_TRUSTED_PROXY_HOPS must be a non-negative integer")?;
 
-        let max_webhook_body_size: usize = env_or("HOOKRELAY_MAX_WEBHOOK_BODY_SIZE", "1048576")?
+        let max_webhook_body_size: usize = env_or("REHOOK_MAX_WEBHOOK_BODY_SIZE", "1048576")?
             .parse()
-            .context("HOOKRELAY_MAX_WEBHOOK_BODY_SIZE must be an integer")?;
+            .context("REHOOK_MAX_WEBHOOK_BODY_SIZE must be an integer")?;
 
-        let max_stored_events: u64 = env_or("HOOKRELAY_MAX_STORED_EVENTS", "10000")?
+        let max_stored_events: u64 = env_or("REHOOK_MAX_STORED_EVENTS", "10000")?
             .parse()
-            .context("HOOKRELAY_MAX_STORED_EVENTS must be an integer")?;
+            .context("REHOOK_MAX_STORED_EVENTS must be an integer")?;
 
-        let event_retention_days: u32 = env_or("HOOKRELAY_EVENT_RETENTION_DAYS", "14")?
+        let event_retention_days: u32 = env_or("REHOOK_EVENT_RETENTION_DAYS", "14")?
             .parse()
-            .context("HOOKRELAY_EVENT_RETENTION_DAYS must be an integer")?;
+            .context("REHOOK_EVENT_RETENTION_DAYS must be an integer")?;
 
-        let session_key_hex = env_or("HOOKRELAY_SESSION_KEY", "")?;
+        let session_key_hex = env_or("REHOOK_SESSION_KEY", "")?;
         let session_key_hex = if session_key_hex.is_empty() {
-            tracing::warn!("HOOKRELAY_SESSION_KEY unset; generating an ephemeral key. Sessions will not survive restarts.");
+            tracing::warn!("REHOOK_SESSION_KEY unset; generating an ephemeral key. Sessions will not survive restarts.");
             hex::encode(rand::random::<[u8; 32]>())
         } else {
             session_key_hex
         };
 
-        let session_ttl_hours: u64 = env_or("HOOKRELAY_SESSION_TTL_HOURS", "720")?
+        let session_ttl_hours: u64 = env_or("REHOOK_SESSION_TTL_HOURS", "720")?
             .parse()
-            .context("HOOKRELAY_SESSION_TTL_HOURS must be an integer")?;
+            .context("REHOOK_SESSION_TTL_HOURS must be an integer")?;
 
-        let rust_log = env_or("RUST_LOG", "hookrelay=info,tower_http=info")?;
+        let rust_log = env_or("RUST_LOG", "rehook=info,tower_http=info")?;
 
         let admin_username = env::var("ADMIN_USERNAME").ok().filter(|s| !s.is_empty());
         let admin_password = env::var("ADMIN_PASSWORD").ok().filter(|s| !s.is_empty());
@@ -80,10 +80,8 @@ impl Config {
             ));
         }
 
-        let dashboard_dir = PathBuf::from(env_or(
-            "HOOKRELAY_DASHBOARD_DIR",
-            "./dashboards/admin/dist",
-        )?);
+        let dashboard_dir =
+            PathBuf::from(env_or("REHOOK_DASHBOARD_DIR", "./dashboards/admin/dist")?);
 
         // Safety: ServeDir serves files from this directory to any HTTP
         // client. A misconfiguration pointing at a sensitive directory (the
@@ -112,7 +110,7 @@ impl Config {
     /// Bytes of the session key, derived from the hex config.
     pub fn session_key(&self) -> Result<Vec<u8>> {
         hex::decode(&self.session_key_hex)
-            .map_err(|e| anyhow!("HOOKRELAY_SESSION_KEY is not valid hex: {e}"))
+            .map_err(|e| anyhow!("REHOOK_SESSION_KEY is not valid hex: {e}"))
     }
 }
 
@@ -134,7 +132,7 @@ fn validate_dashboard_dir(dir: &std::path::Path) -> Result<()> {
     for component in dir.components() {
         if let std::path::Component::ParentDir = component {
             return Err(anyhow!(
-                "HOOKRELAY_DASHBOARD_DIR must not contain '..' components: {} \
+                "REHOOK_DASHBOARD_DIR must not contain '..' components: {} \
                  (this would risk exposing files outside the intended directory)",
                 dir.display()
             ));
@@ -146,7 +144,7 @@ fn validate_dashboard_dir(dir: &std::path::Path) -> Result<()> {
     let parent = dir.parent();
     if parent.is_none() || dir.as_os_str().is_empty() {
         return Err(anyhow!(
-            "HOOKRELAY_DASHBOARD_DIR must not be the filesystem root \
+            "REHOOK_DASHBOARD_DIR must not be the filesystem root \
              (this would expose the entire filesystem)"
         ));
     }
@@ -156,7 +154,7 @@ fn validate_dashboard_dir(dir: &std::path::Path) -> Result<()> {
     // the SPA will not load.
     if !dir.join("index.html").exists() {
         tracing::warn!(
-            "HOOKRELAY_DASHBOARD_DIR ({}) does not contain index.html. \
+            "REHOOK_DASHBOARD_DIR ({}) does not contain index.html. \
              The dashboard will not load until the admin dashboard is built.",
             dir.display()
         );

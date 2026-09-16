@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
-# HookRelay agent installer.
+# Rehook agent installer.
 #
 # Downloads the latest release binary for your platform from GitHub,
 # installs it to /usr/local/bin (or a local bin dir), and verifies it runs.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/hookrelay/main/scripts/install-agent.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/rehook/main/scripts/install-agent.sh | bash
 #
 # Or to install a specific version:
-#   curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/hookrelay/main/scripts/install-agent.sh | bash -s -- --version v0.1.0
+#   curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/rehook/main/scripts/install-agent.sh | bash -s -- --version v0.1.0
 #
 # To update an existing installation:
-#   hookrelay version
-#   curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/hookrelay/main/scripts/install-agent.sh | bash
+#   rehook version
+#   curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/rehook/main/scripts/install-agent.sh | bash
 #
 # The script is safe to re-run. It overwrites the existing binary.
 
 set -euo pipefail
 
-REPO="theadeyemiolayinka/hookrelay"
+REPO="theadeyemiolayinka/rehook"
 GITHUB_API="https://api.github.com/repos/${REPO}"
 INSTALL_DIR="/usr/local/bin"
 LOCAL_DIR="${HOME}/.local/bin"
@@ -38,7 +38,7 @@ while [[ $# -gt 0 ]]; do
         --help|-h)
             echo "Usage: install-agent.sh [--version <tag>] [--dir <path>]"
             echo ""
-            echo "Installs the HookRelay agent binary from GitHub releases."
+            echo "Installs the Rehook agent binary from GitHub releases."
             echo ""
             echo "Options:"
             echo "  --version <tag>   Install a specific release tag (e.g. v0.1.0)"
@@ -86,12 +86,12 @@ if [[ -z "$VERSION" ]]; then
     fi
 fi
 
-echo "Installing HookRelay agent ${VERSION} for ${PLATFORM_OS}-${PLATFORM_ARCH}..."
+echo "Installing Rehook agent ${VERSION} for ${PLATFORM_OS}-${PLATFORM_ARCH}..."
 
 # Construct the download URL. The release asset naming is:
-#   hookrelay-{version}-{os}-{arch}
-# The binary inside the tarball is named "hookrelay".
-ASSET_NAME="hookrelay-${VERSION}-${PLATFORM_OS}-${PLATFORM_ARCH}.tar.gz"
+#   rehook-{version}-{os}-{arch}
+# The binary inside the tarball is named "rehook".
+ASSET_NAME="rehook-${VERSION}-${PLATFORM_OS}-${PLATFORM_ARCH}.tar.gz"
 DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET_NAME}"
 
 # Download to a temp directory.
@@ -110,12 +110,12 @@ echo "Extracting..."
 tar -xzf "${TMP_DIR}/${ASSET_NAME}" -C "$TMP_DIR"
 
 # Find the binary.
-BINARY_PATH="${TMP_DIR}/hookrelay"
+BINARY_PATH="${TMP_DIR}/rehook"
 if [[ ! -f "$BINARY_PATH" ]]; then
     # Some release layouts put it in a subdirectory.
-    BINARY_PATH=$(find "$TMP_DIR" -name "hookrelay" -type f | head -1)
+    BINARY_PATH=$(find "$TMP_DIR" -name "rehook" -type f | head -1)
     if [[ -z "$BINARY_PATH" ]]; then
-        echo "Could not find the hookrelay binary in the archive."
+        echo "Could not find the rehook binary in the archive."
         exit 1
     fi
 fi
@@ -128,12 +128,12 @@ echo "  Binary version: ${VERSION_OUTPUT}"
 
 # Choose install directory.
 if [[ -w "$INSTALL_DIR" ]] || [[ $EUID -eq 0 ]]; then
-    TARGET="${INSTALL_DIR}/hookrelay"
+    TARGET="${INSTALL_DIR}/rehook"
 else
     echo ""
     echo "${INSTALL_DIR} is not writable. Installing to ${LOCAL_DIR} instead."
     mkdir -p "$LOCAL_DIR"
-    TARGET="${LOCAL_DIR}/hookrelay"
+    TARGET="${LOCAL_DIR}/rehook"
 
     # Warn if not in PATH.
     case ":${PATH}:" in
@@ -155,7 +155,7 @@ echo "Installed: ${TARGET}"
 
 echo ""
 echo "Next steps:"
-echo "  hookrelay web    # open the agent web UI in your browser"
-echo "  hookrelay --help # see all commands"
+echo "  rehook web    # open the agent web UI in your browser"
+echo "  rehook --help # see all commands"
 echo ""
-echo "Docs: https://theadeyemiolayinka.github.io/hookrelay/"
+echo "Docs: https://theadeyemiolayinka.github.io/rehook/"

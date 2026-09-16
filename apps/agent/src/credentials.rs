@@ -14,7 +14,7 @@ use std::os::unix::fs::PermissionsExt;
 use anyhow::{anyhow, Context, Result};
 use uuid::Uuid;
 
-const SERVICE_NAME: &str = "hookrelay-agent";
+const SERVICE_NAME: &str = "rehook-agent";
 const KEYRING_USERNAME: &str = "agent-token";
 
 /// Store the agent token. Tries the keychain first, falls back to a file.
@@ -54,7 +54,7 @@ pub fn load_token() -> Result<String> {
         Ok(entry) => match entry.get_password() {
             Ok(t) => Ok(t),
             Err(keyring::Error::NoEntry) => {
-                Err(anyhow!("no agent token stored; run `hookrelay login`"))
+                Err(anyhow!("no agent token stored; run `rehook login`"))
             }
             Err(e) => {
                 tracing::warn!("keychain load failed ({e}); trying plaintext file");
@@ -80,7 +80,7 @@ pub fn delete_token() -> Result<()> {
 fn fallback_path() -> Result<std::path::PathBuf> {
     let dir = dirs::config_dir()
         .ok_or_else(|| anyhow!("could not determine config directory"))?
-        .join("hookrelay");
+        .join("rehook");
     fs::create_dir_all(&dir).ok();
     Ok(dir.join("token"))
 }
@@ -98,7 +98,7 @@ fn fallback_store(token: &str) -> Result<()> {
 fn fallback_load() -> Result<String> {
     let path = fallback_path()?;
     if !path.exists() {
-        return Err(anyhow!("no agent token stored; run `hookrelay login`"));
+        return Err(anyhow!("no agent token stored; run `rehook login`"));
     }
     let token = fs::read_to_string(&path)
         .context("reading fallback token file")?

@@ -71,7 +71,7 @@ export function Layout({ children }: Props) {
     <>
       <div className="sidebar-brand">
         <Logo size={28} />
-        <span className="sidebar-brand-name">HookRelay</span>
+        <span className="sidebar-brand-name">Rehook</span>
       </div>
       <nav className="sidebar-nav" aria-label="Primary navigation">
         {NAV.map((item) => {

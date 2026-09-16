@@ -1,6 +1,6 @@
 # Security
 
-This document describes the trust model and security boundaries of HookRelay.
+This document describes the trust model and security boundaries of Rehook.
 It is kept aligned with the implementation. If behavior differs from this
 document, the implementation is the source of truth and this document must be
 updated.
@@ -89,7 +89,7 @@ external users. Production responses do not include stack traces.
 ## Dashboard static file serving
 
 The server serves the built admin dashboard from the directory configured by
-`HOOKRELAY_DASHBOARD_DIR` (default: `./dashboards/admin/dist`). This directory
+`REHOOK_DASHBOARD_DIR` (default: `./dashboards/admin/dist`). This directory
 is served to any HTTP client via `tower_http::services::ServeDir`.
 
 Misconfiguring this value is a security risk:

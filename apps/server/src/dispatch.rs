@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use base64::Engine;
 use chrono::Utc;
-use hookrelay_protocol::{is_hop_by_hop, DeliveryInstruction, ReplayHeader};
+use rehook_protocol::{is_hop_by_hop, DeliveryInstruction, ReplayHeader};
 use uuid::Uuid;
 
 use crate::database::models::EventRow;

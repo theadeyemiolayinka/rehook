@@ -1,5 +1,5 @@
 [package]
-name = "hookrelay-server"
+name = "rehook-server"
 version = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
@@ -7,11 +7,11 @@ authors = { workspace = true }
 repository = { workspace = true }
 
 [[bin]]
-name = "hookrelay-server"
+name = "rehook-server"
 path = "src/main.rs"
 
 [dependencies]
-hookrelay-protocol = { path = "../../crates/protocol" }
+rehook-protocol = { path = "../../crates/protocol" }
 tokio = { workspace = true }
 axum = { workspace = true }
 tower = { workspace = true }

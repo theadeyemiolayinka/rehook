@@ -10,7 +10,7 @@
 use std::time::{Duration, Instant};
 
 use base64::Engine;
-use hookrelay_protocol::{
+use rehook_protocol::{
     is_hop_by_hop, DeliveryErrorCategory, DeliveryInstruction, DeliveryOutcome, ReplayHeader,
 };
 use reqwest::Method;

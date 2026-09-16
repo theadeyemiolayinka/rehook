@@ -1,4 +1,4 @@
-//! HookRelay server entrypoint.
+//! Rehook server entrypoint.
 
 mod api;
 mod auth;
@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
     // Handle --version early.
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--version" || a == "-V") {
-        println!("hookrelay-server {}", env!("CARGO_PKG_VERSION"));
+        println!("rehook-server {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
 
@@ -33,7 +33,7 @@ async fn main() -> Result<()> {
     init_tracing(&config);
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
-        "starting hookrelay server"
+        "starting rehook server"
     );
 
     let state = AppState::new(&config).await.context("initializing state")?;

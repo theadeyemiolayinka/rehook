@@ -35,19 +35,19 @@ server {
 
 ## Trusted proxy hops
 
-If you use a reverse proxy, set `HOOKRELAY_TRUSTED_PROXY_HOPS` to the number of proxy hops between the internet and the server. This controls whether `X-Forwarded-For` is trusted for client IP resolution.
+If you use a reverse proxy, set `REHOOK_TRUSTED_PROXY_HOPS` to the number of proxy hops between the internet and the server. This controls whether `X-Forwarded-For` is trusted for client IP resolution.
 
 ## Session key
 
-Always set `HOOKRELAY_SESSION_KEY` to a stable 32-byte hex value in production. If unset, a random key is generated on each restart and all sessions are invalidated.
+Always set `REHOOK_SESSION_KEY` to a stable 32-byte hex value in production. If unset, a random key is generated on each restart and all sessions are invalidated.
 
 ## Public base URL
 
-Set `HOOKRELAY_PUBLIC_BASE_URL` to your HTTPS URL. This ensures:
+Set `REHOOK_PUBLIC_BASE_URL` to your HTTPS URL. This ensures:
 - Webhook URLs displayed in the dashboard are correct.
 - Session cookies are marked `Secure`.
 - The dashboard is accessible at the expected URL.
 
 ## Backups
 
-The SQLite database is the only persistent state. Back up the file at `{HOOKRELAY_DATA_DIR}/hookrelay.db` regularly. SQLite WAL mode means you should also back up the `-wal` file, or use `sqlite3 hookrelay.db ".backup '/path/to/backup.db'"` for a consistent snapshot.
+The SQLite database is the only persistent state. Back up the file at `{REHOOK_DATA_DIR}/rehook.db` regularly. SQLite WAL mode means you should also back up the `-wal` file, or use `sqlite3 rehook.db ".backup '/path/to/backup.db'"` for a consistent snapshot.

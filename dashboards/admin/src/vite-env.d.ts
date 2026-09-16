@@ -1,4 +1,4 @@
 /// <reference types="vite/client" />
 
 declare module '*.css';
-declare module '@hookrelay/shared/styles.css';
+declare module '@rehook/shared/styles.css';

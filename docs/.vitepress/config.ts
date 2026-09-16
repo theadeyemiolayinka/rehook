@@ -1,8 +1,8 @@
 import { defineConfig } from 'vitepress';
 
 export default defineConfig({
-  title: 'HookRelay',
-  description: 'Self-hostable webhook capture, inspection, and local delivery',
+  title: 'Rehook',
+  description: 'Self-hosted webhook relay for local development: capture, inspect, and replay webhooks to configured local targets',
   lang: 'en',
   cleanUrls: true,
   lastUpdated: true,
@@ -17,7 +17,7 @@ export default defineConfig({
 
     nav: [
       { text: 'Docs', link: '/getting-started/server' },
-      { text: 'GitHub', link: 'https://github.com/theadeyemiolayinka/hookrelay' },
+      { text: 'GitHub', link: 'https://github.com/theadeyemiolayinka/rehook' },
     ],
 
     sidebar: [
@@ -73,7 +73,7 @@ export default defineConfig({
     ],
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/theadeyemiolayinka/hookrelay' },
+      { icon: 'github', link: 'https://github.com/theadeyemiolayinka/rehook' },
     ],
 
     footer: {

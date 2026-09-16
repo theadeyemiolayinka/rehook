@@ -29,8 +29,8 @@ pub struct ConnectionState {
     notify: Arc<Notify>,
     /// Outbound protocol messages queued by the web API (e.g. live
     /// Subscribe/Unsubscribe when routes change while connected).
-    outbound_tx: mpsc::UnboundedSender<hookrelay_protocol::ClientMessage>,
-    outbound_rx: Arc<Mutex<mpsc::UnboundedReceiver<hookrelay_protocol::ClientMessage>>>,
+    outbound_tx: mpsc::UnboundedSender<rehook_protocol::ClientMessage>,
+    outbound_rx: Arc<Mutex<mpsc::UnboundedReceiver<rehook_protocol::ClientMessage>>>,
 }
 
 impl Default for ConnectionState {
@@ -96,7 +96,7 @@ impl ConnectionState {
     /// Queue a protocol message to send over the active connection.
     /// Messages sent while disconnected are dropped; the connection
     /// loop resubscribes all routes on each (re)connect.
-    pub fn send_outbound(&self, msg: hookrelay_protocol::ClientMessage) {
+    pub fn send_outbound(&self, msg: rehook_protocol::ClientMessage) {
         let _ = self.outbound_tx.send(msg);
     }
 
@@ -104,7 +104,7 @@ impl ConnectionState {
     /// should lock and read from it.
     pub fn outbound_receiver(
         &self,
-    ) -> Arc<Mutex<mpsc::UnboundedReceiver<hookrelay_protocol::ClientMessage>>> {
+    ) -> Arc<Mutex<mpsc::UnboundedReceiver<rehook_protocol::ClientMessage>>> {
         self.outbound_rx.clone()
     }
 }

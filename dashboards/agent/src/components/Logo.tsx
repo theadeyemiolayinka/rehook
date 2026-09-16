@@ -1,4 +1,4 @@
-// HookRelay mark. Matches dashboards/agent/public/favicon.svg.
+// Rehook mark. Matches dashboards/agent/public/favicon.svg.
 
 interface Props {
   size?: number;
@@ -43,7 +43,7 @@ export function Logo({ size = 24, withWordmark = false }: Props) {
             color: 'var(--text)',
           }}
         >
-          HookRelay
+          Rehook
         </span>
       ) : null}
     </span>

@@ -5,24 +5,24 @@ The agent web UI is a local browser interface for configuring and managing the a
 ## Starting the web UI
 
 ```bash
-hookrelay web
+rehook web
 ```
 
 Open `http://localhost:8787` in your browser. The web UI runs locally on your machine.
 
-`hookrelay web` starts both the web UI and the WebSocket connection to the server. You do not need to run a separate command.
+`rehook web` starts both the web UI and the WebSocket connection to the server. You do not need to run a separate command.
 
 To use a different port:
 
 ```bash
-hookrelay web --port 9000
+rehook web --port 9000
 ```
 
 ## First-time setup
 
 If the agent is not yet configured, the web UI shows a login page. Enter the details from your server admin dashboard:
 
-- **Server URL**: your HookRelay server URL
+- **Server URL**: your Rehook server URL
 - **Agent ID**: the UUID from the admin dashboard
 - **Agent Token**: the one-time token from the admin dashboard
 - **Agent Name** (optional): a friendly name for this machine
@@ -41,7 +41,7 @@ Add, edit, and remove local delivery targets. A target is a local HTTP destinati
 
 ### Routes page
 
-Connect inbound endpoints to local targets. A route maps an endpoint from your HookRelay server to a local target. When the server sends a delivery for an event on that endpoint, the agent uses the route to find the right target. You can change a route's target at any time; the agent re-subscribes live so the change takes effect immediately without reconnecting.
+Connect inbound endpoints to local targets. A route maps an endpoint from your Rehook server to a local target. When the server sends a delivery for an event on that endpoint, the agent uses the route to find the right target. You can change a route's target at any time; the agent re-subscribes live so the change takes effect immediately without reconnecting.
 
 Different endpoints in the same project can route to different targets. For example, in a "payments" project, route the "paystack" endpoint to one target and the "stripe" endpoint to another.
 
@@ -67,4 +67,4 @@ From an event's detail page, click Replay. Select a target. The agent delivers t
 
 The web UI and the terminal share the same configuration. Changes made in the web UI are visible to the terminal and vice versa.
 
-`hookrelay web` starts both the web UI and the connection loop. If you only want the connection loop without the web UI, use `hookrelay start` instead.
+`rehook web` starts both the web UI and the connection loop. If you only want the connection loop without the web UI, use `rehook start` instead.

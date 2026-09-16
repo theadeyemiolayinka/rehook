@@ -1,5 +1,5 @@
 {
-  "name": "hookrelay-agent-dashboard",
+  "name": "rehook-agent-dashboard",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -12,7 +12,7 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.3",
-    "@hookrelay/shared": "file:../shared"
+    "@rehook/shared": "file:../shared"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",

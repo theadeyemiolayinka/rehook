@@ -10,8 +10,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/theadeyemiolayinka/hookrelay.git
-cd hookrelay
+git clone https://github.com/theadeyemiolayinka/rehook.git
+cd rehook
 
 # Build all Rust crates
 cargo build
@@ -33,8 +33,8 @@ Start the server:
 
 ```bash
 cp .env.example .env
-# Edit .env: set ADMIN_PASSWORD and HOOKRELAY_SESSION_KEY
-cargo run -p hookrelay-server
+# Edit .env: set ADMIN_PASSWORD and REHOOK_SESSION_KEY
+cargo run -p rehook-server
 ```
 
 Start the admin dashboard dev server (with API proxy to the backend):
@@ -58,13 +58,13 @@ Open `http://localhost:5174`. The API is proxied to `http://localhost:8787`.
 ## Running the agent
 
 ```bash
-cargo run -p hookrelay-agent -- login --server http://localhost:8080 --agent-id <id> --token <token>
-cargo run -p hookrelay-agent -- target add myapp http://localhost:8000/webhook
-cargo run -p hookrelay-agent -- route add <endpoint-id> myapp
-cargo run -p hookrelay-agent -- web
+cargo run -p rehook-agent -- login --server http://localhost:8080 --agent-id <id> --token <token>
+cargo run -p rehook-agent -- target add myapp http://localhost:8000/webhook
+cargo run -p rehook-agent -- route add <endpoint-id> myapp
+cargo run -p rehook-agent -- web
 ```
 
-Open `http://localhost:8787`. `hookrelay web` starts both the web UI and the connection loop.
+Open `http://localhost:8787`. `rehook web` starts both the web UI and the connection loop.
 
 ## Running the docs site
 
@@ -88,7 +88,7 @@ Output is in `docs/.vitepress/dist`.
 ## Repository structure
 
 ```
-hookrelay/
+rehook/
 ├── apps/server/       Axum HTTP server
 ├── apps/agent/        Rust CLI agent
 ├── crates/protocol/   Shared WebSocket protocol

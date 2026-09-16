@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Build the HookRelay agent binary for the current platform.
-# Output: target/release/hookrelay
+# Build the Rehook agent binary for the current platform.
+# Output: target/release/rehook
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-echo "Building hookrelay-agent (release)..."
-cargo build --release -p hookrelay-agent
+echo "Building rehook-agent (release)..."
+cargo build --release -p rehook-agent
 
-BINARY="target/release/hookrelay"
+BINARY="target/release/rehook"
 if [[ "$(uname)" == "Darwin" ]]; then
-    BINARY="target/release/hookrelay"
+    BINARY="target/release/rehook"
 fi
 
 echo ""

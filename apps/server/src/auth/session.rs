@@ -10,7 +10,7 @@ use sqlx::SqlitePool;
 use crate::config::Config;
 
 /// The name of the session cookie.
-pub const COOKIE_NAME: &str = "hookrelay_session";
+pub const COOKIE_NAME: &str = "rehook_session";
 
 /// A session row.
 #[derive(Debug, Clone, sqlx::FromRow)]

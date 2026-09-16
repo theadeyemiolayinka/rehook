@@ -15,7 +15,7 @@ use axum::extract::{ConnectInfo, State};
 use axum::response::IntoResponse;
 use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
-use hookrelay_protocol::{
+use rehook_protocol::{
     encode, ClientMessage, DeliveryErrorCategory, DeliveryOutcome, ServerMessage, PROTOCOL_VERSION,
 };
 use uuid::Uuid;
@@ -63,7 +63,7 @@ async fn handle_connection(state: Arc<AppState>, socket: WebSocket, addr: Socket
         platform: _,
         architecture: _,
         version: _,
-    } = (match hookrelay_protocol::decode::<ClientMessage>(&hello_text) {
+    } = (match rehook_protocol::decode::<ClientMessage>(&hello_text) {
         Ok(m) => m,
         Err(e) => {
             tracing::warn!(%addr, error = %e, "invalid hello message");
@@ -248,7 +248,7 @@ async fn handle_client_message(
     agent_id: Uuid,
     text: &str,
 ) -> Result<(), String> {
-    let msg: ClientMessage = hookrelay_protocol::decode(text).map_err(|e| e.to_string())?;
+    let msg: ClientMessage = rehook_protocol::decode(text).map_err(|e| e.to_string())?;
     match msg {
         ClientMessage::Hello { .. } => {
             // Hello after authentication is ignored.

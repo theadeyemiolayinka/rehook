@@ -1,4 +1,4 @@
-// HookRelay mark. Matches dashboards/admin/public/favicon.svg and docs/logo.svg.
+// Rehook mark. Matches dashboards/admin/public/favicon.svg and docs/logo.svg.
 // Inline so it can be reused in the sidebar, login, and dialogs without an
 // extra network request or a CSS placeholder square.
 
@@ -53,7 +53,7 @@ export function Logo({ size = 24, withWordmark = false, subtle = false }: Props)
             color: 'var(--text)',
           }}
         >
-          HookRelay
+          Rehook
         </span>
       ) : null}
     </span>

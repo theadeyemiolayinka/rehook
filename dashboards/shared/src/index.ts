@@ -1,2 +1,2 @@
-// Shared utilities for HookRelay dashboards.
+// Shared utilities for Rehook dashboards.
 export * from './format';

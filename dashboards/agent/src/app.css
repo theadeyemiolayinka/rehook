@@ -1,5 +1,5 @@
 /* Agent dashboard layout styles. Uses shared design tokens from
-   @hookrelay/shared/styles.css. Follows the TAO Admin Dashboard Spec. */
+   @rehook/shared/styles.css. Follows the TAO Admin Dashboard Spec. */
 
 .layout {
   display: flex;

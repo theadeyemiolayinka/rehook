@@ -70,8 +70,8 @@ async fn create(
         return Err(ApiError::BadRequest("name is required".into()));
     }
     let id = uuid::Uuid::new_v4().to_string();
-    // Generate a raw token. Format: "hr_" + 32 url-safe base64 chars.
-    let raw_token = format!("hr_{}", generate_token_secret());
+    // Generate a raw token. Format: "re_" + 32 url-safe base64 chars.
+    let raw_token = format!("re_{}", generate_token_secret());
     let token_hash = hex::encode(
         hash_token(
             &raw_token,

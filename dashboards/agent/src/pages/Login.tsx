@@ -40,7 +40,7 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
         </div>
 
         <div className="login-heading">
-          <h1>Connect to a HookRelay server</h1>
+          <h1>Connect to a Rehook server</h1>
           <p className="login-subtitle">
             Enter your agent credentials. The agent ID and token are shown in the
             admin dashboard when you create an agent.
@@ -78,7 +78,7 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
               type="password"
               value={token}
               onChange={(e) => setToken(e.target.value)}
-              placeholder="hr_..."
+              placeholder="re_..."
               required
             />
           </div>

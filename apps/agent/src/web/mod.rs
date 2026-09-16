@@ -2,7 +2,7 @@
 //!
 //! Binds to localhost only. Serves the agent dashboard and a local API.
 //! The browser talks to this local server; it never talks to the public
-//! HookRelay server directly. See SECURITY.md.
+//! Rehook server directly. See SECURITY.md.
 //!
 //! Security: the web UI binds to 127.0.0.1 by default. It does not expose
 //! agent tokens in responses. Target URLs are validated using the same
@@ -59,7 +59,7 @@ pub async fn run(port: u16, dashboard_dir: Option<PathBuf>) -> Result<()> {
         if local.exists() {
             local
         } else {
-            PathBuf::from("/usr/local/share/hookrelay/agent-dashboard")
+            PathBuf::from("/usr/local/share/rehook/agent-dashboard")
         }
     });
 

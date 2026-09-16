@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use hookrelay_protocol::DeliveryInstruction;
+use rehook_protocol::DeliveryInstruction;
 use tokio::sync::{mpsc, Mutex};
 use uuid::Uuid;
 
@@ -27,7 +27,7 @@ struct ConnectedAgent {
 pub enum GatewayOutbound {
     Instruction(DeliveryInstruction),
     /// A control message (e.g. SubscriptionConfirmed).
-    Message(hookrelay_protocol::ServerMessage),
+    Message(rehook_protocol::ServerMessage),
     /// Sent when the agent should be disconnected (e.g. revoked mid-session).
     Disconnect,
 }
@@ -141,7 +141,7 @@ impl AgentRegistry {
     pub async fn send_message(
         &self,
         agent_id: Uuid,
-        msg: hookrelay_protocol::ServerMessage,
+        msg: rehook_protocol::ServerMessage,
     ) -> Result<(), String> {
         let mut agents = self.agents.lock().await;
         let Some(agent) = agents.get_mut(&agent_id) else {

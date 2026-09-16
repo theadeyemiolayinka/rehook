@@ -31,7 +31,7 @@ impl AgentConfig {
     pub fn path() -> Result<PathBuf> {
         let dir = dirs::config_dir()
             .ok_or_else(|| anyhow!("could not determine config directory"))?
-            .join("hookrelay");
+            .join("rehook");
         fs::create_dir_all(&dir).context("creating config directory")?;
         Ok(dir.join("agent.json"))
     }

@@ -265,7 +265,7 @@ export function Routes() {
       <Dialog
         open={addOpen}
         title="New route"
-        description="Pick an endpoint from your HookRelay server and connect it to a local target. Events received on that endpoint will be delivered to the target."
+        description="Pick an endpoint from your Rehook server and connect it to a local target. Events received on that endpoint will be delivered to the target."
         onClose={() => setAddOpen(false)}
         footer={
           <>

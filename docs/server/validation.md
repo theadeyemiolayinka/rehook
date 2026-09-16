@@ -1,6 +1,6 @@
 # Webhook Validation
 
-HookRelay can optionally validate that inbound webhooks are authentic before storing them. This prevents unauthorized requests from being captured as events.
+Rehook can optionally validate that inbound webhooks are authentic before storing them. This prevents unauthorized requests from being captured as events.
 
 ## How it works
 

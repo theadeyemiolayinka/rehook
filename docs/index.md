@@ -2,12 +2,12 @@
 layout: home
 
 hero:
-  name: HookRelay
+  name: Rehook
   text: Webhook capture and local delivery
   tagline: Receive webhooks on a public server while your local machine is offline. Deliver them later through an authenticated agent.
   image:
     src: /logo.svg
-    alt: HookRelay
+    alt: Rehook
   actions:
     - theme: brand
       text: Get Started
@@ -17,7 +17,7 @@ hero:
       link: /getting-started/agent
     - theme: alt
       text: GitHub
-      link: https://github.com/theadeyemiolayinka/hookrelay
+      link: https://github.com/theadeyemiolayinka/rehook
 
 features:
   - title: Capture and store

@@ -23,7 +23,7 @@ From the web UI (Targets page):
 From the terminal:
 
 ```bash
-hookrelay target add myapp http://localhost:8000/webhook
+rehook target add myapp http://localhost:8000/webhook
 ```
 
 ## Allowed destinations
@@ -55,7 +55,7 @@ From the web UI, go to the Routes page and click New route. Pick an endpoint fro
 From the terminal:
 
 ```bash
-hookrelay route add <endpoint-id> myapp
+rehook route add <endpoint-id> myapp
 ```
 
 Get the endpoint ID from the admin dashboard (Endpoints page).
@@ -67,7 +67,7 @@ From the web UI, click Remove next to the target.
 From the terminal:
 
 ```bash
-hookrelay target remove myapp
+rehook target remove myapp
 ```
 
 Removing a target also removes any routes that reference it.

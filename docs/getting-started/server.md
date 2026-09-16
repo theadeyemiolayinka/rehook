@@ -1,6 +1,6 @@
 # Getting Started: Server
 
-The HookRelay server receives webhooks, stores them, and serves the admin dashboard. It runs as a Docker container in production.
+The Rehook server receives webhooks, stores them, and serves the admin dashboard. It runs as a Docker container in production.
 
 ## Quick start with Docker Compose
 
@@ -9,15 +9,15 @@ The HookRelay server receives webhooks, stores them, and serves the admin dashbo
 If you have the repository cloned:
 
 ```bash
-git clone https://github.com/theadeyemiolayinka/hookrelay.git
-cd hookrelay
+git clone https://github.com/theadeyemiolayinka/rehook.git
+cd rehook
 ```
 
 Or download just the compose file and env example:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/hookrelay/main/compose.yml -o compose.yml
-curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/hookrelay/main/.env.example -o .env
+curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/rehook/main/compose.yml -o compose.yml
+curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/rehook/main/.env.example -o .env
 ```
 
 ### 2. Configure environment
@@ -29,17 +29,17 @@ Edit the `.env` file. At minimum, set these two values:
 ADMIN_PASSWORD=change-me-to-a-strong-password
 
 # Session signing key. Generate one with: openssl rand -hex 32
-HOOKRELAY_SESSION_KEY=paste-your-32-byte-hex-key-here
+REHOOK_SESSION_KEY=paste-your-32-byte-hex-key-here
 ```
 
 Other useful settings:
 
 ```bash
 # Your public HTTPS URL. Set this to your domain.
-HOOKRELAY_PUBLIC_BASE_URL=https://hooks.example.com
+REHOOK_PUBLIC_BASE_URL=https://hooks.example.com
 
 # Number of trusted proxy hops (e.g. 1 if behind a single reverse proxy)
-HOOKRELAY_TRUSTED_PROXY_HOPS=1
+REHOOK_TRUSTED_PROXY_HOPS=1
 ```
 
 ### 3. Start the server
@@ -88,7 +88,7 @@ hooks.example.com {
 }
 ```
 
-Set `HOOKRELAY_PUBLIC_BASE_URL` to your HTTPS URL so webhook URLs and session cookies are configured correctly.
+Set `REHOOK_PUBLIC_BASE_URL` to your HTTPS URL so webhook URLs and session cookies are configured correctly.
 
 ### With Coolify or Dokploy
 

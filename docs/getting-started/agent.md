@@ -1,6 +1,6 @@
 # Getting Started: Agent
 
-The HookRelay agent runs on your local machine. It connects to your HookRelay server and delivers webhooks to your local applications.
+The Rehook agent runs on your local machine. It connects to your Rehook server and delivers webhooks to your local applications.
 
 You can set up the agent entirely from the web UI, or use the terminal. Both paths work together.
 
@@ -9,10 +9,10 @@ You can set up the agent entirely from the web UI, or use the terminal. Both pat
 ### One-line install (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/hookrelay/main/scripts/install-agent.sh | bash
+curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/rehook/main/scripts/install-agent.sh | bash
 ```
 
-This detects your OS and architecture, downloads the latest release from GitHub, and installs the `hookrelay` binary. It works on:
+This detects your OS and architecture, downloads the latest release from GitHub, and installs the `rehook` binary. It works on:
 
 - macOS (Intel and Apple Silicon)
 - Linux (x86_64 and ARM64)
@@ -20,7 +20,7 @@ This detects your OS and architecture, downloads the latest release from GitHub,
 To install a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/hookrelay/main/scripts/install-agent.sh | bash -s -- --version v0.1.0
+curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/rehook/main/scripts/install-agent.sh | bash -s -- --version v0.1.0
 ```
 
 ### Update the agent
@@ -28,13 +28,13 @@ curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/hookrelay/main/s
 Re-run the install command. It overwrites the existing binary:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/hookrelay/main/scripts/install-agent.sh | bash
+curl -fsSL https://raw.githubusercontent.com/theadeyemiolayinka/rehook/main/scripts/install-agent.sh | bash
 ```
 
 Check your current version first:
 
 ```bash
-hookrelay version
+rehook version
 ```
 
 ### Build from source
@@ -42,19 +42,19 @@ hookrelay version
 If you have Rust installed:
 
 ```bash
-git clone https://github.com/theadeyemiolayinka/hookrelay.git
-cd hookrelay
-cargo build --release -p hookrelay-agent
+git clone https://github.com/theadeyemiolayinka/rehook.git
+cd rehook
+cargo build --release -p rehook-agent
 ```
 
-The binary is at `target/release/hookrelay`.
+The binary is at `target/release/rehook`.
 
 ## Concepts
 
 Before setting up the agent, understand these three concepts:
 
 - **Target**: A local HTTP destination on your machine (e.g. `http://localhost:8000/webhook`). You give each target a short ID like `myapp`. The agent only ever sends requests to URLs you configure here. The server never sends URLs.
-- **Endpoint**: An inbound webhook URL on your HookRelay server (e.g. a "paystack" endpoint in a "payments" project). Each endpoint has its own URL and can route to a different local target.
+- **Endpoint**: An inbound webhook URL on your Rehook server (e.g. a "paystack" endpoint in a "payments" project). Each endpoint has its own URL and can route to a different local target.
 - **Route**: A mapping from an endpoint to a target. When the server sends a delivery for an event on that endpoint, the agent uses the route to find the right local target and delivers there.
 
 ## Set up the agent
@@ -64,14 +64,14 @@ Before setting up the agent, understand these three concepts:
 Start the web UI and connection loop:
 
 ```bash
-hookrelay web
+rehook web
 ```
 
 Open `http://localhost:8787` in your browser. If the agent is not yet configured, you will see a login page.
 
 Enter the details from your server admin dashboard (Agents page):
 
-- **Server URL**: your HookRelay server URL
+- **Server URL**: your Rehook server URL
 - **Agent ID**: the UUID shown when you created the agent
 - **Agent Token**: the one-time token shown when you created the agent
 - **Agent Name**: a friendly name for this machine (optional)
@@ -93,27 +93,27 @@ If you prefer the terminal, here are the equivalent commands:
 
 ```bash
 # Log in (get the agent ID and token from the admin dashboard)
-hookrelay login \
+rehook login \
   --server https://hooks.example.com \
   --agent-id 550e8400-e29b-41d4-a716-446655440000 \
-  --token hr_your_token_here \
+  --token re_your_token_here \
   --name my-laptop
 
 # Add a local target
-hookrelay target add myapp http://localhost:8000/webhook
+rehook target add myapp http://localhost:8000/webhook
 
 # Map an endpoint to the target (use the endpoint ID from the admin dashboard)
-hookrelay route add 550e8400-e29b-41d4-a716-446655440000 myapp
+rehook route add 550e8400-e29b-41d4-a716-446655440000 myapp
 
 # Start the web UI and connection loop
-hookrelay web
+rehook web
 ```
 
 The web UI and terminal share the same configuration. Changes made in one are visible in the other.
 
 ## How the connection works
 
-`hookrelay web` starts both the local web UI and the WebSocket connection to the server. The agent:
+`rehook web` starts both the local web UI and the WebSocket connection to the server. The agent:
 
 1. Connects outbound to the server.
 2. Authenticates with your agent ID and token.
@@ -123,7 +123,7 @@ The web UI and terminal share the same configuration. Changes made in one are vi
 
 The token is loaded from the OS keychain.
 
-If you only want the connection loop without the web UI, use `hookrelay start` instead.
+If you only want the connection loop without the web UI, use `rehook start` instead.
 
 ## What happens when you replay an event
 
@@ -144,19 +144,19 @@ Go to the History page to see delivery results: HTTP status, duration, and any e
 ## CLI reference
 
 ```
-hookrelay web                          # start the web UI and connection loop
-hookrelay start                        # start the connection loop only
-hookrelay login --server ... --agent-id ... --token ... [--name ...]
-hookrelay target add <id> <url>        # add a local target
-hookrelay target remove <id>
-hookrelay target list
-hookrelay route add <endpoint-id> <target-id>
-hookrelay route remove <endpoint-id>
-hookrelay route list
-hookrelay history                      # show recent deliveries
-hookrelay config                       # print current configuration
-hookrelay logout                       # delete stored credentials
-hookrelay version                      # print version
+rehook web                          # start the web UI and connection loop
+rehook start                        # start the connection loop only
+rehook login --server ... --agent-id ... --token ... [--name ...]
+rehook target add <id> <url>        # add a local target
+rehook target remove <id>
+rehook target list
+rehook route add <endpoint-id> <target-id>
+rehook route remove <endpoint-id>
+rehook route list
+rehook history                      # show recent deliveries
+rehook config                       # print current configuration
+rehook logout                       # delete stored credentials
+rehook version                      # print version
 ```
 
 See [Agent Installation](../agent/installation.md) for full command details.

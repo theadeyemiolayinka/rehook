@@ -332,7 +332,7 @@ async fn add_route(
     if let Ok(eid) = uuid::Uuid::parse_str(req.endpoint_id.trim()) {
         state
             .conn_state
-            .send_outbound(hookrelay_protocol::ClientMessage::Subscribe {
+            .send_outbound(rehook_protocol::ClientMessage::Subscribe {
                 endpoint_id: eid,
                 target_id: req.target_id.trim().to_string(),
             });
@@ -384,7 +384,7 @@ async fn update_route(
     if let Ok(eid) = uuid::Uuid::parse_str(&endpoint_id) {
         state
             .conn_state
-            .send_outbound(hookrelay_protocol::ClientMessage::Subscribe {
+            .send_outbound(rehook_protocol::ClientMessage::Subscribe {
                 endpoint_id: eid,
                 target_id: req.target_id.trim().to_string(),
             });
@@ -414,7 +414,7 @@ async fn remove_route(
     if let Ok(eid) = uuid::Uuid::parse_str(&endpoint_id) {
         state
             .conn_state
-            .send_outbound(hookrelay_protocol::ClientMessage::Unsubscribe { endpoint_id: eid });
+            .send_outbound(rehook_protocol::ClientMessage::Unsubscribe { endpoint_id: eid });
     }
 
     Ok(StatusCode::NO_CONTENT)
@@ -504,24 +504,24 @@ async fn replay_event(
         .map_err(|e| ApiError::BadRequest(e.to_string()))?;
 
     // Build the delivery instruction from the stored event.
-    let headers: Vec<hookrelay_protocol::ReplayHeader> =
+    let headers: Vec<rehook_protocol::ReplayHeader> =
         serde_json::from_str::<serde_json::Value>(&event.headers_json)
             .ok()
             .and_then(|v| match v {
                 serde_json::Value::Object(map) => {
                     let mut out = Vec::new();
                     for (name, value) in map {
-                        if hookrelay_protocol::is_hop_by_hop(&name) {
+                        if rehook_protocol::is_hop_by_hop(&name) {
                             continue;
                         }
                         match value {
                             serde_json::Value::String(s) => {
-                                out.push(hookrelay_protocol::ReplayHeader { name, value: s })
+                                out.push(rehook_protocol::ReplayHeader { name, value: s })
                             }
                             serde_json::Value::Array(arr) => {
                                 for v in arr {
                                     if let serde_json::Value::String(s) = v {
-                                        out.push(hookrelay_protocol::ReplayHeader {
+                                        out.push(rehook_protocol::ReplayHeader {
                                             name: name.clone(),
                                             value: s,
                                         });
@@ -537,7 +537,7 @@ async fn replay_event(
             })
             .unwrap_or_default();
 
-    let instruction = hookrelay_protocol::DeliveryInstruction {
+    let instruction = rehook_protocol::DeliveryInstruction {
         delivery_id: uuid::Uuid::new_v4(),
         event_id: uuid::Uuid::parse_str(&event.id).unwrap_or_default(),
         project_id: uuid::Uuid::parse_str(&event.project_id).unwrap_or_default(),

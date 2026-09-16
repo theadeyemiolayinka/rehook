@@ -117,17 +117,17 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
         <div className="card-title">Configuration paths</div>
         <div className="status-row">
           <span className="status-label">Config file</span>
-          <span className="status-value">~/.config/hookrelay/agent.json</span>
+          <span className="status-value">~/.config/rehook/agent.json</span>
         </div>
         <div className="status-row">
           <span className="status-label">Token storage</span>
           <span className="status-value">
-            OS keychain (or ~/.config/hookrelay/token)
+            OS keychain (or ~/.config/rehook/token)
           </span>
         </div>
         <div className="status-row">
           <span className="status-label">Local database</span>
-          <span className="status-value">~/.local/share/hookrelay/agent.db</span>
+          <span className="status-value">~/.local/share/rehook/agent.db</span>
         </div>
       </div>
 

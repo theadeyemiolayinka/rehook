@@ -1,5 +1,5 @@
 // Public base URL for building inbound webhook URLs. Fetched once from
-// /api/settings (HOOKRELAY_PUBLIC_BASE_URL on the server) and cached.
+// /api/settings (REHOOK_PUBLIC_BASE_URL on the server) and cached.
 // Falls back to the dashboard origin, which is correct when the dashboard
 // is served same-origin behind the public domain.
 

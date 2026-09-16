@@ -1,4 +1,4 @@
-// API client for the HookRelay dashboard. Same-origin in production; proxied
+// API client for the Rehook dashboard. Same-origin in production; proxied
 // in dev. Cookie-based sessions, so credentials: 'include'.
 
 export class ApiError extends Error {

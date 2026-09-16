@@ -177,7 +177,7 @@ export function Agents() {
       ) : agents.length === 0 ? (
         <EmptyState
           title="No agents yet"
-          description="Create an agent, then run the HookRelay agent on your machine and sign in with the agent ID and token."
+          description="Create an agent, then run the Rehook agent on your machine and sign in with the agent ID and token."
           action={
             <Button variant="primary" onClick={() => setCreateOpen(true)}>
               <IconPlus size={14} /> New agent

@@ -17,13 +17,13 @@ Inbound endpoint identifiers are generated with 120 bits of entropy and are not 
 
 ## Request handling
 
-- Bodies are bounded by `HOOKRELAY_MAX_WEBHOOK_BODY_SIZE` (default 1 MB).
+- Bodies are bounded by `REHOOK_MAX_WEBHOOK_BODY_SIZE` (default 1 MB).
 - Hop-by-hop and transport headers are not replayed. The shared list is in `crates/protocol`.
 - Sensitive headers (Authorization, Cookie, Set-Cookie, X-API-Key, etc.) are masked in the dashboard by default. The raw view is available to authenticated administrators.
 
 ## Trusted proxy handling
 
-The server does not blindly trust `X-Forwarded-For`, `X-Real-IP`, or `CF-Connecting-IP`. Set `HOOKRELAY_TRUSTED_PROXY_HOPS` to the number of trusted proxy hops. When 0 (default), the direct socket peer is used.
+The server does not blindly trust `X-Forwarded-For`, `X-Real-IP`, or `CF-Connecting-IP`. Set `REHOOK_TRUSTED_PROXY_HOPS` to the number of trusted proxy hops. When 0 (default), the direct socket peer is used.
 
 ## Authentication
 

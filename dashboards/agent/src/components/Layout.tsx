@@ -52,7 +52,7 @@ export function Layout({ children }: { children?: React.ReactNode }) {
     <>
       <div className="sidebar-brand">
         <Logo size={28} />
-        <span className="sidebar-brand-name">HookRelay</span>
+        <span className="sidebar-brand-name">Rehook</span>
       </div>
       <nav className="sidebar-nav" aria-label="Primary navigation">
         {navItems.map((item) => {
