@@ -18,6 +18,8 @@ pub struct DeliveryRecord {
     pub duration_ms: Option<i64>,
     pub error_category: Option<String>,
     pub error_message: Option<String>,
+    pub response_headers_json: Option<String>,
+    pub response_body: Option<Vec<u8>>,
     pub started_at: String,
     pub completed_at: Option<String>,
 }
@@ -110,6 +112,27 @@ impl LocalDb {
             .await
             .ok();
 
+        // Add response capture columns to databases created before they
+        // existed. SQLite has no IF NOT EXISTS for ALTER TABLE, so check
+        // the table info first.
+        let cols: Vec<String> =
+            sqlx::query_scalar("SELECT name FROM pragma_table_info('deliveries')")
+                .fetch_all(&pool)
+                .await
+                .unwrap_or_default();
+        if !cols.iter().any(|c| c == "response_headers_json") {
+            sqlx::query("ALTER TABLE deliveries ADD COLUMN response_headers_json TEXT")
+                .execute(&pool)
+                .await
+                .ok();
+        }
+        if !cols.iter().any(|c| c == "response_body") {
+            sqlx::query("ALTER TABLE deliveries ADD COLUMN response_body BLOB")
+                .execute(&pool)
+                .await
+                .ok();
+        }
+
         Ok(Self { pool })
     }
 
@@ -117,8 +140,9 @@ impl LocalDb {
         sqlx::query(
             "INSERT INTO deliveries
                 (id, event_id, target_id, attempt_number, status, http_status,
-                 duration_ms, error_category, error_message, started_at, completed_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                 duration_ms, error_category, error_message, response_headers_json,
+                 response_body, started_at, completed_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&rec.id)
         .bind(&rec.event_id)
@@ -129,6 +153,8 @@ impl LocalDb {
         .bind(rec.duration_ms)
         .bind(&rec.error_category)
         .bind(&rec.error_message)
+        .bind(&rec.response_headers_json)
+        .bind(&rec.response_body)
         .bind(&rec.started_at)
         .bind(&rec.completed_at)
         .execute(&self.pool)
@@ -140,7 +166,8 @@ impl LocalDb {
     pub async fn recent_deliveries(&self, limit: i64) -> Result<Vec<DeliveryRecord>> {
         let rows: Vec<DeliveryRecord> = sqlx::query_as(
             "SELECT id, event_id, target_id, attempt_number, status, http_status,
-                    duration_ms, error_category, error_message, started_at, completed_at
+                    duration_ms, error_category, error_message, response_headers_json,
+                    response_body, started_at, completed_at
              FROM deliveries ORDER BY started_at DESC LIMIT ?",
         )
         .bind(limit)
@@ -148,6 +175,43 @@ impl LocalDb {
         .await
         .context("fetching deliveries")?;
         Ok(rows)
+    }
+
+    pub async fn deliveries_for_event(&self, event_id: &str) -> Result<Vec<DeliveryRecord>> {
+        let rows: Vec<DeliveryRecord> = sqlx::query_as(
+            "SELECT id, event_id, target_id, attempt_number, status, http_status,
+                    duration_ms, error_category, error_message, response_headers_json,
+                    response_body, started_at, completed_at
+             FROM deliveries WHERE event_id = ? ORDER BY started_at DESC",
+        )
+        .bind(event_id)
+        .fetch_all(&self.pool)
+        .await
+        .context("fetching deliveries for event")?;
+        Ok(rows)
+    }
+
+    pub async fn get_delivery(&self, id: &str) -> Result<Option<DeliveryRecord>> {
+        let row: Option<DeliveryRecord> = sqlx::query_as(
+            "SELECT id, event_id, target_id, attempt_number, status, http_status,
+                    duration_ms, error_category, error_message, response_headers_json,
+                    response_body, started_at, completed_at
+             FROM deliveries WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .context("fetching delivery")?;
+        Ok(row)
+    }
+
+    pub async fn delete_event(&self, id: &str) -> Result<bool> {
+        let res = sqlx::query("DELETE FROM events WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .context("deleting event")?;
+        Ok(res.rows_affected() > 0)
     }
 
     pub async fn store_event(&self, event: &StoredEvent) -> Result<()> {

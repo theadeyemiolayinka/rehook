@@ -11,7 +11,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::{mpsc, Mutex, Notify};
 
 /// Shared state for the agent connection.
 #[derive(Clone)]
@@ -27,6 +27,10 @@ pub struct ConnectionState {
     /// connection loop can retry immediately instead of waiting for
     /// its backoff timer.
     notify: Arc<Notify>,
+    /// Outbound protocol messages queued by the web API (e.g. live
+    /// Subscribe/Unsubscribe when routes change while connected).
+    outbound_tx: mpsc::UnboundedSender<hookrelay_protocol::ClientMessage>,
+    outbound_rx: Arc<Mutex<mpsc::UnboundedReceiver<hookrelay_protocol::ClientMessage>>>,
 }
 
 impl Default for ConnectionState {
@@ -37,11 +41,14 @@ impl Default for ConnectionState {
 
 impl ConnectionState {
     pub fn new() -> Self {
+        let (outbound_tx, outbound_rx) = mpsc::unbounded_channel();
         Self {
             connected: Arc::new(AtomicBool::new(false)),
             last_connected_at: Arc::new(Mutex::new(None)),
             token: Arc::new(Mutex::new(None)),
             notify: Arc::new(Notify::new()),
+            outbound_tx,
+            outbound_rx: Arc::new(Mutex::new(outbound_rx)),
         }
     }
 
@@ -84,5 +91,20 @@ impl ConnectionState {
     /// if notified before this call.
     pub async fn wait_for_change(&self) {
         self.notify.notified().await;
+    }
+
+    /// Queue a protocol message to send over the active connection.
+    /// Messages sent while disconnected are dropped; the connection
+    /// loop resubscribes all routes on each (re)connect.
+    pub fn send_outbound(&self, msg: hookrelay_protocol::ClientMessage) {
+        let _ = self.outbound_tx.send(msg);
+    }
+
+    /// Get a handle to the outbound receiver. Only the connection loop
+    /// should lock and read from it.
+    pub fn outbound_receiver(
+        &self,
+    ) -> Arc<Mutex<mpsc::UnboundedReceiver<hookrelay_protocol::ClientMessage>>> {
+        self.outbound_rx.clone()
     }
 }

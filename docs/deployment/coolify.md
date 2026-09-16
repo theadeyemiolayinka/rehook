@@ -14,6 +14,10 @@ HookRelay deploys on Coolify or Dokploy using standard Docker Compose. Both plat
 
 Both Coolify and Dokploy handle TLS termination. The server listens on port 8080 inside the container.
 
+## Agent connectivity
+
+The agent connects to the server via WebSocket at `wss://your-domain/agent/ws`. This is an HTTP upgrade request that goes through the same port as the dashboard (443). No additional inbound ports are needed on your VPS. The agent initiates the connection outbound, so it works behind firewalls and NAT.
+
 ## Persistent storage
 
 The named volume `hookrelay-data` is preserved across deploys. SQLite data survives container restarts and updates.

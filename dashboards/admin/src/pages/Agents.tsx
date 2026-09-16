@@ -9,7 +9,7 @@ import { Dialog, ConfirmDialog } from '../components/Dialog';
 import { StatusIndicator } from '../components/StatusIndicator';
 import { CopyButton } from '../components/CopyButton';
 import { useToast } from '../components/Toast';
-import { IconPlus, IconRefresh } from '../components/Icons';
+import { IconPlus, IconRefresh, IconEdit, IconTrash } from '../components/Icons';
 import { formatRelative } from '../lib/format';
 import './Agents.css';
 
@@ -23,6 +23,11 @@ export function Agents() {
   const [created, setCreated] = useState<(Agent & { token: string }) | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<Agent | null>(null);
   const [revoking, setRevoking] = useState(false);
+  const [editTarget, setEditTarget] = useState<Agent | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Agent | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const toast = useToast();
 
   const load = useCallback(async () => {
@@ -92,6 +97,49 @@ export function Agents() {
         e instanceof ApiError ? e.message : 'Failed to enable agent',
         'error',
       );
+    }
+  }
+
+  function openEdit(agent: Agent) {
+    setEditTarget(agent);
+    setEditName(agent.name);
+  }
+
+  async function handleEdit() {
+    if (!editTarget || !editName.trim()) return;
+    setEditing(true);
+    try {
+      await api.patch(`/api/agents/${editTarget.id}`, {
+        name: editName.trim(),
+      });
+      toast.show('Agent renamed', 'success');
+      setEditTarget(null);
+      await load();
+    } catch (e) {
+      toast.show(
+        e instanceof ApiError ? e.message : 'Failed to rename agent',
+        'error',
+      );
+    } finally {
+      setEditing(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/api/agents/${deleteTarget.id}`);
+      toast.show('Agent deleted', 'success');
+      setDeleteTarget(null);
+      await load();
+    } catch (e) {
+      toast.show(
+        e instanceof ApiError ? e.message : 'Failed to delete agent',
+        'error',
+      );
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -174,6 +222,14 @@ export function Agents() {
                     <CopyButton value={a.id} compact />
                   </td>
                   <td className="agents-actions">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => openEdit(a)}
+                      aria-label={`Rename ${a.name}`}
+                    >
+                      <IconEdit size={14} />
+                    </Button>
                     {!a.enabled ? (
                       <Button
                         size="sm"
@@ -191,6 +247,14 @@ export function Agents() {
                         Disable
                       </Button>
                     )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setDeleteTarget(a)}
+                      aria-label={`Delete ${a.name}`}
+                    >
+                      <IconTrash size={14} />
+                    </Button>
                   </td>
                 </tr>
               ))}
@@ -266,6 +330,40 @@ export function Agents() {
         ) : null}
       </Dialog>
 
+      <Dialog
+        open={!!editTarget}
+        title="Rename agent"
+        description="Change the display name for this agent."
+        onClose={() => setEditTarget(null)}
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              onClick={() => setEditTarget(null)}
+              disabled={editing}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleEdit}
+              loading={editing}
+              disabled={!editName.trim()}
+            >
+              Save changes
+            </Button>
+          </>
+        }
+      >
+        <Input
+          label="Agent name"
+          name="edit-name"
+          value={editName}
+          onChange={(e) => setEditName(e.target.value)}
+          autoFocus
+        />
+      </Dialog>
+
       <ConfirmDialog
         open={!!revokeTarget}
         title="Disable agent"
@@ -279,6 +377,21 @@ export function Agents() {
         loading={revoking}
         onConfirm={handleRevoke}
         onCancel={() => setRevokeTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Delete agent"
+        description={
+          deleteTarget
+            ? `Permanently delete ${deleteTarget.name}? The agent will be disconnected and its token will stop working. This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Delete agent"
+        destructive
+        loading={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
       />
     </div>
   );

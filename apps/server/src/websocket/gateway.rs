@@ -139,7 +139,7 @@ async fn handle_connection(state: Arc<AppState>, socket: WebSocket, addr: Socket
     }
 
     // Authenticated. Register in the registry.
-    let mut outbound_rx = state.agents.register(agent_uuid).await;
+    let (conn_id, mut outbound_rx) = state.agents.register(agent_uuid).await;
 
     // Update last seen.
     sqlx::query("UPDATE agents SET last_seen_at = ? WHERE id = ?")
@@ -174,6 +174,15 @@ async fn handle_connection(state: Arc<AppState>, socket: WebSocket, addr: Socket
                 match outbound {
                     GatewayOutbound::Instruction(instr) => {
                         let text = match encode(&ServerMessage::Deliver(instr)) {
+                            Ok(t) => t,
+                            Err(_) => continue,
+                        };
+                        if ws_sink.send(Message::Text(text)).await.is_err() {
+                            break;
+                        }
+                    }
+                    GatewayOutbound::Message(msg) => {
+                        let text = match encode(&msg) {
                             Ok(t) => t,
                             Err(_) => continue,
                         };
@@ -230,7 +239,7 @@ async fn handle_connection(state: Arc<AppState>, socket: WebSocket, addr: Socket
         }
     }
 
-    state.agents.unregister(agent_uuid).await;
+    state.agents.unregister(agent_uuid, conn_id).await;
     tracing::info!(agent_id = %agent_id, "agent disconnected");
 }
 
@@ -255,17 +264,39 @@ async fn handle_client_message(
                 .await
                 .ok();
         }
-        ClientMessage::Subscribe { endpoint_id } => {
-            // Persist subscription and register in-memory.
+        ClientMessage::Subscribe {
+            endpoint_id,
+            target_id,
+        } => {
+            // Persist subscription with the agent's declared target, and
+            // register in-memory so new captures auto-dispatch.
             sqlx::query(
-                "INSERT OR IGNORE INTO agent_subscriptions (agent_id, endpoint_id) VALUES (?, ?)",
+                "INSERT INTO agent_subscriptions (agent_id, endpoint_id, target_id)
+                 VALUES (?, ?, ?)
+                 ON CONFLICT(agent_id, endpoint_id)
+                 DO UPDATE SET target_id = excluded.target_id",
             )
             .bind(agent_id.to_string())
             .bind(endpoint_id.to_string())
+            .bind(&target_id)
             .execute(&state.pool)
             .await
             .ok();
-            state.agents.subscribe(agent_id, endpoint_id).await?;
+            state
+                .agents
+                .subscribe(agent_id, endpoint_id, target_id.clone())
+                .await?;
+            // Confirm the subscription back to the agent.
+            let _ = state
+                .agents
+                .send_message(
+                    agent_id,
+                    ServerMessage::SubscriptionConfirmed { endpoint_id },
+                )
+                .await;
+            // Catch up on events the agent missed while offline.
+            crate::dispatch::catch_up_subscribed_endpoint(state, agent_id, endpoint_id, &target_id)
+                .await;
         }
         ClientMessage::Unsubscribe { endpoint_id } => {
             sqlx::query("DELETE FROM agent_subscriptions WHERE agent_id = ? AND endpoint_id = ?")
@@ -275,6 +306,10 @@ async fn handle_client_message(
                 .await
                 .ok();
             state.agents.unsubscribe(agent_id, endpoint_id).await?;
+            let _ = state
+                .agents
+                .send_message(agent_id, ServerMessage::SubscriptionRemoved { endpoint_id })
+                .await;
         }
         ClientMessage::DeliveryAccepted { delivery_id } => {
             sqlx::query("UPDATE deliveries SET status = 'dispatched' WHERE id = ?")

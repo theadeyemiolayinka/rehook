@@ -1,33 +1,42 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { api, ApiError, type StoredEvent, type Target, type ServerProject } from '../lib/api';
-import { Dialog } from '../components/Dialog';
+import { Link, useNavigate } from 'react-router-dom';
+import { api, ApiError, type StoredEvent, type Target, type ServerProject, type DeliveryRecord } from '../lib/api';
+import { Dialog, ConfirmDialog } from '../components/Dialog';
+import { CodeViewer } from '../components/CodeViewer';
 import { useToast } from '../components/Toast';
-import { IconReplay, IconArrowLeft } from '../components/Icons';
+import { IconReplay, IconArrowLeft, IconTrash } from '../components/Icons';
+import '../components/CodeViewer.css';
 
 export function EventDetail({ id }: { id: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [event, setEvent] = useState<StoredEvent | null>(null);
+  const [deliveries, setDeliveries] = useState<DeliveryRecord[]>([]);
   const [targets, setTargets] = useState<Target[]>([]);
   const [endpointMap, setEndpointMap] = useState<Record<string, { name: string; projectName: string }>>({});
   const [replayOpen, setReplayOpen] = useState(false);
   const [replayTarget, setReplayTarget] = useState('');
   const [replaying, setReplaying] = useState(false);
-  const [tab, setTab] = useState<'headers' | 'body'>('body');
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const navigate = useNavigate();
   const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [ev, t, p] = await Promise.all([
+      const [ev, t, p, d] = await Promise.all([
         api.get<StoredEvent>(`/api/events/${id}`),
         api.get<{ targets: Target[] }>('/api/targets'),
         api.get<{ projects: ServerProject[] }>('/api/projects'),
+        api.get<{ deliveries: DeliveryRecord[] }>(
+          `/api/events/${id}/deliveries`,
+        ).catch(() => ({ deliveries: [] as DeliveryRecord[] })),
       ]);
       setEvent(ev);
       setTargets(t.targets);
+      setDeliveries(d.deliveries);
       const map: Record<string, { name: string; projectName: string }> = {};
       for (const proj of p.projects ?? []) {
         for (const e of proj.endpoints ?? []) {
@@ -66,17 +75,20 @@ export function EventDetail({ id }: { id: string }) {
     }
   };
 
-  const formatBody = (body: string | null) => {
-    if (!body) return '(empty)';
+  const deleteEvent = async () => {
+    if (!event) return;
+    setDeleting(true);
     try {
-      const decoded = atob(body);
-      try {
-        return JSON.stringify(JSON.parse(decoded), null, 2);
-      } catch {
-        return decoded;
-      }
-    } catch {
-      return body;
+      await api.delete(`/api/events/${encodeURIComponent(event.id)}`);
+      toast.show('Event deleted locally', 'success');
+      navigate('/events');
+    } catch (e) {
+      toast.show(
+        e instanceof ApiError ? e.message : 'Failed to delete event',
+        'error',
+      );
+      setDeleting(false);
+      setDeleteOpen(false);
     }
   };
 
@@ -143,6 +155,8 @@ export function EventDetail({ id }: { id: string }) {
     ? (endpointMap[event.endpoint_id]?.name ?? event.endpoint_id)
     : '-';
 
+  const decodedBody = event.body ? atob(event.body) : '';
+
   return (
     <div>
       <div className="page-header">
@@ -157,6 +171,12 @@ export function EventDetail({ id }: { id: string }) {
             <p>Locally stored webhook event.</p>
           </div>
           <div className="page-header-actions">
+            <button
+              className="btn btn-danger btn-sm"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <IconTrash size={14} /> Delete
+            </button>
             <button
               className="btn btn-primary btn-sm"
               onClick={() => {
@@ -205,27 +225,89 @@ export function EventDetail({ id }: { id: string }) {
       </div>
 
       <div className="card">
-        <div className="tabs">
-          <button
-            className={`tab ${tab === 'body' ? 'tab-active' : ''}`}
-            onClick={() => setTab('body')}
-          >
-            Body
-          </button>
-          <button
-            className={`tab ${tab === 'headers' ? 'tab-active' : ''}`}
-            onClick={() => setTab('headers')}
-          >
-            Headers
-          </button>
-        </div>
-        {tab === 'body' ? (
-          <div className="code-block code-block-formatted">
-            {formatBody(event.body)}
+        <div className="card-title">Headers</div>
+        {Object.keys(event.headers).length === 0 ? (
+          <div className="empty-state">No headers captured.</div>
+        ) : (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(event.headers).map(([k, v]) => (
+                  <tr key={k}>
+                    <td className="mono text-secondary">{k}</td>
+                    <td className="mono">
+                      {Array.isArray(v) ? v.join(', ') : v}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">Payload</div>
+        {event.body ? (
+          <CodeViewer body={decodedBody} contentType={event.content_type} />
+        ) : (
+          <div className="empty-state">No body captured.</div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">Deliveries</div>
+        {deliveries.length === 0 ? (
+          <div className="empty-state">
+            No delivery attempts for this event yet. Replay it to deliver it
+            locally.
           </div>
         ) : (
-          <div className="code-block code-block-formatted">
-            {JSON.stringify(event.headers, null, 2)}
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">Status</th>
+                  <th scope="col">HTTP</th>
+                  <th scope="col">Duration</th>
+                  <th scope="col">Target</th>
+                  <th scope="col">Started</th>
+                  <th scope="col">Error</th>
+                </tr>
+              </thead>
+              <tbody>
+                {deliveries.map((r) => (
+                  <tr
+                    key={r.id}
+                    className="clickable-row"
+                    onClick={() => navigate(`/deliveries/${r.id}`)}
+                  >
+                    <td>
+                      {r.status === 'delivered' ? (
+                        <span className="badge badge-success">{r.status}</span>
+                      ) : r.status === 'failed' ? (
+                        <span className="badge badge-error">{r.status}</span>
+                      ) : (
+                        <span className="badge badge-pending">{r.status}</span>
+                      )}
+                    </td>
+                    <td className="mono">{r.http_status ?? '-'}</td>
+                    <td className="mono">
+                      {r.duration_ms != null ? `${r.duration_ms}ms` : '-'}
+                    </td>
+                    <td className="mono">{r.target_id || '-'}</td>
+                    <td className="mono">{r.started_at}</td>
+                    <td className="error-cell">{r.error_message ?? '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -280,6 +362,17 @@ export function EventDetail({ id }: { id: string }) {
           </div>
         )}
       </Dialog>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Delete event"
+        description="Remove this event from local storage? Delivery records are kept. The event on the server is not affected."
+        confirmLabel="Delete event"
+        destructive
+        loading={deleting}
+        onConfirm={deleteEvent}
+        onCancel={() => setDeleteOpen(false)}
+      />
     </div>
   );
 }

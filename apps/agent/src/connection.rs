@@ -214,15 +214,38 @@ async fn connect_once(
         }
     }
 
-    // Subscribe to configured endpoints.
-    for endpoint_id in endpoint_targets.keys() {
-        let eid = Uuid::parse_str(endpoint_id).unwrap_or_default();
-        let sub = ClientMessage::Subscribe { endpoint_id: eid };
-        let _ = ws_sink.send(Message::Text(encode(&sub)?)).await;
+    // Subscribe to configured endpoints, declaring the local target each
+    // endpoint's deliveries should go to. The server stores this so new
+    // captured events auto-dispatch to us, and catches us up on events
+    // we missed while offline. The map doubles as the route table used to
+    // resolve targets for deliveries that arrive without a target id.
+    let mut subscribed: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    for (endpoint_id, target_id) in endpoint_targets.iter() {
+        if let Ok(eid) = Uuid::parse_str(endpoint_id) {
+            let sub = ClientMessage::Subscribe {
+                endpoint_id: eid,
+                target_id: target_id.clone(),
+            };
+            let _ = ws_sink.send(Message::Text(encode(&sub)?)).await;
+            subscribed.insert(endpoint_id.clone(), target_id.clone());
+            tracing::info!(endpoint_id = %eid, target_id = %target_id, "subscribed");
+        }
     }
+
+    let outbound_rx = conn_state.outbound_receiver();
+    let mut outbound_rx = outbound_rx.lock().await;
+    // Drain any messages queued while disconnected; the resubscribe above
+    // already reflects the current routes.
+    while outbound_rx.try_recv().is_ok() {}
 
     let mut heartbeat = tokio::time::interval(Duration::from_secs(20));
     heartbeat.tick().await;
+
+    // Periodically reload config to pick up route changes made via the
+    // CLI (a separate process that cannot notify us directly).
+    let mut config_refresh = tokio::time::interval(Duration::from_secs(10));
+    config_refresh.tick().await;
 
     loop {
         tokio::select! {
@@ -232,11 +255,37 @@ async fn connect_once(
                     break;
                 }
             }
+            _ = config_refresh.tick() => {
+                if let Ok(cfg) = AgentConfig::load() {
+                    sync_subscriptions(&cfg, &mut subscribed, &mut ws_sink).await;
+                }
+            }
+            out = outbound_rx.recv() => {
+                match out {
+                    Some(msg) => {
+                        // Keep the subscribed map in sync so the periodic
+                        // refresh does not fight live updates.
+                        match &msg {
+                            ClientMessage::Subscribe { endpoint_id, target_id } => {
+                                subscribed.insert(endpoint_id.to_string(), target_id.clone());
+                            }
+                            ClientMessage::Unsubscribe { endpoint_id } => {
+                                subscribed.remove(&endpoint_id.to_string());
+                            }
+                            _ => {}
+                        }
+                        if ws_sink.send(Message::Text(encode(&msg)?)).await.is_err() {
+                            break;
+                        }
+                    }
+                    None => break,
+                }
+            }
             msg = ws_stream.next() => {
                 match msg {
                     Some(Ok(Message::Text(t))) => {
                         if let Err(e) = handle_server_message(
-                            &t, allowlist, db, &mut ws_sink,
+                            &t, allowlist, &subscribed, db, &mut ws_sink,
                         ).await {
                             tracing::warn!(error = %e, "server message error");
                         }
@@ -244,7 +293,7 @@ async fn connect_once(
                     Some(Ok(Message::Binary(b))) => {
                         if let Ok(t) = String::from_utf8(b.to_vec()) {
                             if let Err(e) = handle_server_message(
-                                &t, allowlist, db, &mut ws_sink,
+                                &t, allowlist, &subscribed, db, &mut ws_sink,
                             ).await {
                                 tracing::warn!(error = %e, "server message error");
                             }
@@ -267,9 +316,61 @@ async fn connect_once(
     Ok(())
 }
 
+/// Diff the current config routes against what we have subscribed and
+/// send Subscribe/Unsubscribe for any changes. Handles route changes
+/// made via the CLI while the agent is connected.
+async fn sync_subscriptions(
+    config: &AgentConfig,
+    subscribed: &mut std::collections::HashMap<String, String>,
+    ws_sink: &mut futures_util::stream::SplitSink<
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+        Message,
+    >,
+) {
+    for (endpoint_id, target_id) in &config.endpoint_targets {
+        if subscribed.get(endpoint_id) == Some(target_id) {
+            continue;
+        }
+        let Ok(eid) = Uuid::parse_str(endpoint_id) else {
+            continue;
+        };
+        let msg = ClientMessage::Subscribe {
+            endpoint_id: eid,
+            target_id: target_id.clone(),
+        };
+        if let Ok(text) = encode(&msg) {
+            if ws_sink.send(Message::Text(text)).await.is_ok() {
+                subscribed.insert(endpoint_id.clone(), target_id.clone());
+                tracing::info!(%endpoint_id, %target_id, "subscribed (route change)");
+            }
+        }
+    }
+
+    let removed: Vec<String> = subscribed
+        .keys()
+        .filter(|k| !config.endpoint_targets.contains_key(*k))
+        .cloned()
+        .collect();
+    for endpoint_id in removed {
+        let Ok(eid) = Uuid::parse_str(&endpoint_id) else {
+            continue;
+        };
+        let msg = ClientMessage::Unsubscribe { endpoint_id: eid };
+        if let Ok(text) = encode(&msg) {
+            if ws_sink.send(Message::Text(text)).await.is_ok() {
+                subscribed.remove(&endpoint_id);
+                tracing::info!(%endpoint_id, "unsubscribed (route removed)");
+            }
+        }
+    }
+}
+
 async fn handle_server_message(
     text: &str,
     allowlist: &Arc<std::collections::HashMap<String, String>>,
+    routes: &std::collections::HashMap<String, String>,
     db: &Arc<LocalDb>,
     ws_sink: &mut futures_util::stream::SplitSink<
         tokio_tungstenite::WebSocketStream<
@@ -328,25 +429,33 @@ async fn handle_server_message(
             }
 
             // Perform the local delivery.
-            let outcome = delivery::deliver(&instruction, allowlist).await;
+            let result = delivery::deliver(&instruction, allowlist, routes).await;
 
-            // Record locally.
+            // Record locally, including bounded response detail for
+            // inspection in the web UI. The response is never sent to
+            // the server.
             let rec = DeliveryRecord {
                 id: instruction.delivery_id.to_string(),
                 event_id: instruction.event_id.to_string(),
-                target_id: instruction.target_id.clone(),
+                target_id: result.resolved_target_id.clone(),
                 attempt_number: 0,
-                status: if outcome.success {
+                status: if result.outcome.success {
                     "delivered".into()
                 } else {
                     "failed".into()
                 },
-                http_status: outcome.status_code.map(|s| s as i64),
-                duration_ms: Some(outcome.duration_ms as i64),
-                error_category: outcome
+                http_status: result.outcome.status_code.map(|s| s as i64),
+                duration_ms: Some(result.outcome.duration_ms as i64),
+                error_category: result
+                    .outcome
                     .error_category
                     .map(|c| format!("{c:?}").to_lowercase()),
-                error_message: outcome.error_message.clone(),
+                error_message: result
+                    .error_detail
+                    .clone()
+                    .or_else(|| result.outcome.error_message.clone()),
+                response_headers_json: result.response_headers_json.clone(),
+                response_body: result.response_body.clone(),
                 started_at: chrono::Utc::now().to_rfc3339(),
                 completed_at: Some(chrono::Utc::now().to_rfc3339()),
             };
@@ -355,7 +464,7 @@ async fn handle_server_message(
             }
 
             // Report outcome to the server (minimal metadata only).
-            let report = ClientMessage::DeliveryOutcome(outcome);
+            let report = ClientMessage::DeliveryOutcome(result.outcome);
             let _ = ws_sink.send(Message::Text(encode(&report)?)).await;
         }
         ServerMessage::HeartbeatAck { .. } => {}

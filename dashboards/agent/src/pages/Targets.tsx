@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, ApiError, type Target, type RouteEntry } from '../lib/api';
 import { Dialog, ConfirmDialog } from '../components/Dialog';
 import { useToast } from '../components/Toast';
-import { IconPlus, IconTrash, IconRefresh, IconRoute } from '../components/Icons';
+import { IconPlus, IconTrash, IconRefresh, IconRoute, IconEdit } from '../components/Icons';
 
 export function Targets() {
   const [loading, setLoading] = useState(true);
@@ -18,6 +18,10 @@ export function Targets() {
 
   const [removeTarget, setRemoveTarget] = useState<Target | null>(null);
   const [removing, setRemoving] = useState(false);
+
+  const [editTarget, setEditTarget] = useState<Target | null>(null);
+  const [editUrl, setEditUrl] = useState('');
+  const [editing, setEditing] = useState(false);
 
   const toast = useToast();
 
@@ -77,6 +81,31 @@ export function Targets() {
       );
     } finally {
       setRemoving(false);
+    }
+  };
+
+  const openEdit = (t: Target) => {
+    setEditTarget(t);
+    setEditUrl(t.url);
+  };
+
+  const saveEdit = async () => {
+    if (!editTarget || !editUrl.trim()) return;
+    setEditing(true);
+    try {
+      await api.patch(`/api/targets/${encodeURIComponent(editTarget.id)}`, {
+        url: editUrl.trim(),
+      });
+      toast.show('Target updated', 'success');
+      setEditTarget(null);
+      await load();
+    } catch (e) {
+      toast.show(
+        e instanceof ApiError ? e.message : 'Failed to update target',
+        'error',
+      );
+    } finally {
+      setEditing(false);
     }
   };
 
@@ -162,6 +191,13 @@ export function Targets() {
                       <td className="row-action">
                         <button
                           className="icon-btn"
+                          onClick={() => openEdit(t)}
+                          aria-label={`Edit target ${t.id}`}
+                        >
+                          <IconEdit size={14} />
+                        </button>
+                        <button
+                          className="icon-btn"
                           onClick={() => setRemoveTarget(t)}
                           aria-label={`Remove target ${t.id}`}
                         >
@@ -227,6 +263,48 @@ export function Targets() {
           <span className="field-hint">
             The local application endpoint that will receive delivered
             webhooks.
+          </span>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={!!editTarget}
+        title={`Edit target "${editTarget?.id ?? ''}"`}
+        description="Update the local URL for this target. Routes referencing it keep working; new deliveries use the new URL."
+        onClose={() => setEditTarget(null)}
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => setEditTarget(null)}
+              disabled={editing}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              onClick={saveEdit}
+              disabled={editing || !editUrl.trim()}
+            >
+              {editing ? 'Saving...' : 'Save changes'}
+            </button>
+          </>
+        }
+      >
+        <div className="login-field">
+          <label htmlFor="edit-target-url">Local URL</label>
+          <input
+            id="edit-target-url"
+            value={editUrl}
+            onChange={(e) => setEditUrl(e.target.value)}
+            placeholder="http://localhost:8000/webhook"
+            autoFocus
+          />
+          <span className="field-hint">
+            The local application endpoint that will receive delivered
+            webhooks. Only http and https URLs are allowed.
           </span>
         </div>
       </Dialog>

@@ -21,7 +21,7 @@ The server never initiates connections to a developer's local machine.
 A Rust CLI that:
 - Connects outbound to the server via WebSocket
 - Authenticates with a revocable token
-- Subscribes to projects
+- Subscribes to endpoints, declaring the local target for each
 - Receives delivery instructions
 - Validates targets against a local allowlist
 - Delivers webhooks to local HTTP targets
@@ -43,12 +43,19 @@ Provider --HTTPS--> Server (capture + persist)
 ```
 
 1. A provider sends a webhook to `https://hooks.example.com/i/{id}`.
-2. The server validates the endpoint, enforces limits, captures the request, and stores the event.
-3. The developer triggers a replay from the admin dashboard.
-4. The server sends a delivery instruction referencing a target identifier (not a URL).
-5. The agent validates the instruction against its local allowlist.
-6. The agent reconstructs a safe HTTP request and sends it to the local target.
-7. The agent records the result locally and sends minimal metadata to the server.
+2. The server validates the endpoint (including optional signature validation), enforces limits, captures the request, and stores the event.
+3. The server finds agents subscribed to that endpoint and dispatches a delivery instruction to each connected one. The instruction references the event and the target identifier the agent declared at subscribe time (never a URL).
+4. If the agent is offline, the event stays stored. When the agent reconnects and resubscribes, the server dispatches every event on that endpoint with no prior delivery attempt for that agent (catch-up). Already-delivered events are not re-sent.
+5. A developer can also trigger a manual replay from the admin dashboard to a connected agent and chosen target.
+6. The agent validates the instruction against its local allowlist.
+7. The agent reconstructs a safe HTTP request and sends it to the local target.
+8. The agent records the result locally and sends minimal metadata to the server.
+
+## Connection notes
+
+- The agent connects outbound to `/agent/ws` on the same host and port as the server. Over TLS this is `wss://{domain}/agent/ws` on port 443; no extra inbound ports are needed on the server or the developer's machine.
+- The `addr` shown in server logs (for example `127.0.0.1:54234`) is the agent's ephemeral source port, not a server listen port.
+- The agent sends heartbeats and reconnects with exponential backoff when the connection drops. Missed events are recovered by catch-up on resubscribe, so WebSocket delivery is not required to be always-on for durability.
 
 ## Trust boundaries
 

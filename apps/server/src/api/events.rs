@@ -191,6 +191,7 @@ async fn delete_one(
 struct DeliveryRow {
     id: String,
     agent_id: String,
+    agent_name: Option<String>,
     target_id: String,
     attempt_number: i64,
     status: String,
@@ -210,10 +211,13 @@ async fn list_deliveries(
     Path(id): Path<String>,
 ) -> ApiResult<impl IntoResponse> {
     let rows: Vec<DeliveryRow> = sqlx::query_as(
-        "SELECT id, agent_id, target_id, attempt_number, status, http_status,
-                duration_ms, error_category, error_message, started_at, completed_at
-         FROM deliveries WHERE event_id = ?
-         ORDER BY attempt_number ASC",
+        "SELECT d.id, d.agent_id, a.name AS agent_name, d.target_id, d.attempt_number,
+                d.status, d.http_status, d.duration_ms, d.error_category,
+                d.error_message, d.started_at, d.completed_at
+         FROM deliveries d
+         LEFT JOIN agents a ON a.id = d.agent_id
+         WHERE d.event_id = ?
+         ORDER BY d.attempt_number ASC",
     )
     .bind(&id)
     .fetch_all(&state.pool)

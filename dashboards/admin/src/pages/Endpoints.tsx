@@ -8,6 +8,7 @@ import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { CopyButton } from '../components/CopyButton';
 import { formatRelative } from '../lib/format';
+import { usePublicBaseUrl } from '../lib/baseUrl';
 import './Endpoints.css';
 
 export function Endpoints() {
@@ -35,6 +36,8 @@ export function Endpoints() {
     }
   }, []);
 
+  const baseUrl = usePublicBaseUrl();
+
   useEffect(() => {
     load();
   }, [load]);
@@ -49,8 +52,6 @@ export function Endpoints() {
       </div>
     );
   }
-
-  const baseUrl = (import.meta.env.VITE_PUBLIC_BASE_URL as string | undefined) ?? '';
 
   return (
     <div className="endpoints">

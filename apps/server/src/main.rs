@@ -4,6 +4,7 @@ mod api;
 mod auth;
 mod config;
 mod database;
+mod dispatch;
 mod error;
 mod http;
 mod state;

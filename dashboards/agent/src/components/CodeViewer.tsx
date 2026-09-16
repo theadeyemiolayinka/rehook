@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
-import { CopyButton } from './CopyButton';
+import { IconCopy } from './Icons';
 import { highlightJson } from '../lib/jsonHighlight';
 import './CodeViewer.css';
 
 interface Props {
-  body: string; // decoded body text
+  body: string;
   contentType?: string | null;
 }
 
@@ -26,15 +26,25 @@ export function CodeViewer({ body, contentType }: Props) {
     body.trimStart().startsWith('[');
 
   const formatted = useMemo(() => (isJson ? tryFormatJson(body) : null), [body, isJson]);
-  const [mode, setMode] = useState<Mode>('formatted');
+  const [mode, setMode] = useState<Mode>(isJson && formatted ? 'formatted' : 'raw');
+  const [copied, setCopied] = useState(false);
 
-  // Render limit to avoid freezing the browser on large payloads.
   const RENDER_LIMIT = 200_000;
   const display = useMemo(() => {
     const src = mode === 'formatted' && formatted ? formatted : body;
     if (src.length <= RENDER_LIMIT) return { text: src, truncated: false };
     return { text: src.slice(0, RENDER_LIMIT), truncated: true };
   }, [mode, formatted, body]);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(display.text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // fallback: select text
+    }
+  };
 
   return (
     <div className="code-viewer">
@@ -61,7 +71,9 @@ export function CodeViewer({ body, contentType }: Props) {
             </span>
           )}
         </div>
-        <CopyButton value={mode === 'formatted' && formatted ? formatted : body} />
+        <button className="code-viewer-copy" onClick={copy} aria-label="Copy body">
+          <IconCopy size={13} /> {copied ? 'Copied' : 'Copy'}
+        </button>
       </div>
       <pre className="code-viewer-body">
         <code>
@@ -72,7 +84,7 @@ export function CodeViewer({ body, contentType }: Props) {
       </pre>
       {display.truncated ? (
         <div className="code-viewer-truncated">
-          Output truncated. Use the raw body endpoint or copy to inspect the full payload.
+          Output truncated. Copy to inspect the full payload.
         </div>
       ) : null}
     </div>

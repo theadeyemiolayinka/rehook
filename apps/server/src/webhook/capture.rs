@@ -11,13 +11,26 @@ use std::sync::Arc;
 
 use axum::body::Bytes;
 use axum::extract::{ConnectInfo, Path, State};
-use axum::http::{HeaderMap, Method};
+use axum::http::{HeaderMap, Method, Uri};
 use axum::response::IntoResponse;
 use axum::Json;
 use serde_json::json;
 
+use super::validate::{validate, ValidationResult};
 use crate::error::ApiError;
 use crate::state::AppState;
+
+/// Minimal endpoint info needed for capture and validation.
+#[derive(Debug, sqlx::FromRow)]
+struct EndpointInfo {
+    id: String,
+    project_id: String,
+    enabled: bool,
+    validation_type: String,
+    validation_secret: Option<String>,
+    validation_header: Option<String>,
+    validation_query: Option<String>,
+}
 
 /// Capture an inbound webhook. Accepts the common webhook methods.
 pub async fn capture(
@@ -25,27 +38,30 @@ pub async fn capture(
     Path(public_identifier): Path<String>,
     method: Method,
     headers: HeaderMap,
+    uri: Uri,
     addr: ConnectInfo<SocketAddr>,
     body: Bytes,
 ) -> Result<impl IntoResponse, ApiError> {
     // Resolve the endpoint. Unknown and disabled endpoints respond the same.
-    let endpoint: Option<(String, String, bool)> =
-        sqlx::query_as("SELECT id, project_id, enabled FROM endpoints WHERE public_identifier = ?")
-            .bind(&public_identifier)
-            .fetch_optional(&state.pool)
-            .await
-            .map_err(|e| {
-                tracing::error!(error = ?e, "endpoint lookup failed");
-                ApiError::Internal
-            })?;
+    let endpoint: Option<EndpointInfo> = sqlx::query_as(
+        "SELECT id, project_id, enabled, validation_type, validation_secret, validation_header, validation_query
+         FROM endpoints WHERE public_identifier = ?",
+    )
+    .bind(&public_identifier)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        tracing::error!(error = ?e, "endpoint lookup failed");
+        ApiError::Internal
+    })?;
 
-    let Some((endpoint_id, project_id, enabled)) = endpoint else {
+    let Some(ep) = endpoint else {
         // Unknown endpoint: respond 202 to avoid leaking existence.
         tracing::debug!(identifier = %public_identifier, "webhook to unknown endpoint");
         return Ok(Json(json!({ "accepted": true })).into_response());
     };
 
-    if !enabled {
+    if !ep.enabled {
         // Disabled endpoint: respond identically to avoid leaking state.
         tracing::debug!(identifier = %public_identifier, "webhook to disabled endpoint");
         return Ok(Json(json!({ "accepted": true })).into_response());
@@ -54,6 +70,27 @@ pub async fn capture(
     // Enforce body size (belt and suspenders; the layer also limits this).
     if body.len() > state.config.max_webhook_body_size {
         return Err(ApiError::PayloadTooLarge);
+    }
+
+    // Validate the webhook signature/token if configured.
+    match validate(
+        &ep.validation_type,
+        ep.validation_secret.as_deref(),
+        ep.validation_header.as_deref(),
+        ep.validation_query.as_deref(),
+        &headers,
+        &uri,
+        &body,
+    ) {
+        ValidationResult::Ok => {}
+        ValidationResult::Failed(reason) => {
+            tracing::warn!(
+                identifier = %public_identifier,
+                reason = %reason,
+                "webhook validation failed"
+            );
+            return Err(ApiError::Forbidden);
+        }
     }
 
     // Determine remote address using trusted proxy configuration.
@@ -75,8 +112,8 @@ pub async fn capture(
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
     )
     .bind(&event_id)
-    .bind(&project_id)
-    .bind(&endpoint_id)
+    .bind(&ep.project_id)
+    .bind(&ep.id)
     .bind(method.as_str())
     .bind(&content_type)
     .bind(&remote_address)
@@ -92,11 +129,27 @@ pub async fn capture(
 
     tracing::info!(
         event_id = %event_id,
-        endpoint_id = %endpoint_id,
+        endpoint_id = %ep.id,
         method = %method,
         size = body.len(),
         "webhook captured"
     );
+
+    // Dispatch to connected agents subscribed to this endpoint.
+    let event = crate::database::models::EventRow {
+        id: event_id.clone(),
+        project_id: ep.project_id.clone(),
+        endpoint_id: ep.id.clone(),
+        request_method: method.as_str().to_string(),
+        content_type: content_type.clone(),
+        remote_address: remote_address.clone(),
+        received_at: chrono::Utc::now().to_rfc3339(),
+        payload_size: body.len() as i64,
+        headers_json: headers_json.clone(),
+        body: Some(body.as_ref().to_vec()),
+        delivery_state: "pending".into(),
+    };
+    crate::dispatch::dispatch_new_event(&state, &event).await;
 
     // Enforce retention policy: delete events older than the retention window
     // and trim to the maximum stored events count. Runs after each capture.

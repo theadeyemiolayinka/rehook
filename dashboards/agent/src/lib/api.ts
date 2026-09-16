@@ -92,6 +92,8 @@ export interface DeliveryRecord {
   duration_ms: number | null;
   error_category: string | null;
   error_message: string | null;
+  response_headers: Record<string, string> | null;
+  response_body: string | null; // base64
   started_at: string;
   completed_at: string | null;
 }

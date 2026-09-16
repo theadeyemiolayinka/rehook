@@ -132,6 +132,18 @@ export const IconRoute = (p: IconProps) => (
   </svg>
 );
 
+export const IconChevronDown = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M6 9l6 6 6-6" />
+  </svg>
+);
+
+export const IconEdit = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z" />
+  </svg>
+);
+
 export const IconWarning = (p: IconProps) => (
   <svg {...base(p)}>
     <path d="M12 9v4m0 4h.01" />

@@ -10,6 +10,7 @@ import { Routes } from './pages/Routes';
 import { Events } from './pages/Events';
 import { EventDetail } from './pages/EventDetail';
 import { History } from './pages/History';
+import { DeliveryDetail } from './pages/DeliveryDetail';
 import { Settings } from './pages/Settings';
 import { api, type ConnectionStatus } from './lib/api';
 
@@ -17,6 +18,12 @@ function EventDetailWrapper() {
   const { id } = useParams<{ id: string }>();
   if (!id) return <Navigate to="/events" replace />;
   return <EventDetail id={id} />;
+}
+
+function DeliveryDetailWrapper() {
+  const { id } = useParams<{ id: string }>();
+  if (!id) return <Navigate to="/history" replace />;
+  return <DeliveryDetail id={id} />;
 }
 
 export default function App() {
@@ -74,6 +81,10 @@ export default function App() {
             <Route path="/events" element={<Events />} />
             <Route path="/events/:id" element={<EventDetailWrapper />} />
             <Route path="/history" element={<History />} />
+            <Route
+              path="/deliveries/:id"
+              element={<DeliveryDetailWrapper />}
+            />
             <Route
               path="/settings"
               element={<Settings onLogout={loadStatus} />}

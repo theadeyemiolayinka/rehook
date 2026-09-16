@@ -21,7 +21,7 @@ use crate::state::AppState;
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(list).post(create))
-        .route("/:id", get(get_one).patch(update))
+        .route("/:id", get(get_one).patch(update).delete(delete_one))
 }
 
 #[derive(Debug, Deserialize)]
@@ -32,6 +32,7 @@ struct CreateAgentRequest {
 #[derive(Debug, Deserialize)]
 struct UpdateAgentRequest {
     enabled: Option<bool>,
+    name: Option<String>,
 }
 
 async fn list(
@@ -117,19 +118,58 @@ async fn update(
     Path(id): Path<String>,
     Json(req): Json<UpdateAgentRequest>,
 ) -> ApiResult<impl IntoResponse> {
+    if req
+        .name
+        .as_deref()
+        .map(|n| n.trim().is_empty())
+        .unwrap_or(false)
+    {
+        return Err(ApiError::BadRequest("name cannot be empty".into()));
+    }
     let agent: AgentRow = sqlx::query_as(
         "UPDATE agents SET
             enabled = COALESCE(?, enabled),
+            name = COALESCE(?, name),
             updated_at = datetime('now')
          WHERE id = ?
          RETURNING id, name, enabled, created_at, updated_at, last_seen_at",
     )
     .bind(req.enabled)
+    .bind(req.name.as_deref().map(str::trim))
     .bind(&id)
     .fetch_optional(&state.pool)
     .await?
     .ok_or(ApiError::NotFound)?;
+
+    // A disabled agent must not keep a live connection.
+    if req.enabled == Some(false) {
+        if let Ok(agent_uuid) = uuid::Uuid::parse_str(&id) {
+            state.agents.disconnect(agent_uuid).await;
+        }
+    }
     Ok(Json(json!(agent)))
+}
+
+async fn delete_one(
+    State(state): State<Arc<AppState>>,
+    _session: AuthSession,
+    Path(id): Path<String>,
+) -> ApiResult<impl IntoResponse> {
+    let agent_uuid =
+        uuid::Uuid::parse_str(&id).map_err(|_| ApiError::BadRequest("invalid agent id".into()))?;
+
+    // Drop the live connection first so the agent stops immediately.
+    state.agents.disconnect(agent_uuid).await;
+
+    let res = sqlx::query("DELETE FROM agents WHERE id = ?")
+        .bind(&id)
+        .execute(&state.pool)
+        .await?;
+    if res.rows_affected() == 0 {
+        return Err(ApiError::NotFound);
+    }
+    tracing::info!(agent_id = %id, "agent deleted");
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Generate a 32-byte url-safe random token secret.

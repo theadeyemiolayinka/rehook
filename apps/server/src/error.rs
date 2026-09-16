@@ -15,6 +15,8 @@ pub enum ApiError {
     NotFound,
     #[error("unauthorized")]
     Unauthorized,
+    #[error("forbidden")]
+    Forbidden,
     #[error("bad request: {0}")]
     BadRequest(String),
     #[error("conflict: {0}")]
@@ -32,6 +34,7 @@ impl IntoResponse for ApiError {
         let (status, message) = match &self {
             ApiError::NotFound => (StatusCode::NOT_FOUND, "not found".to_string()),
             ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized".to_string()),
+            ApiError::Forbidden => (StatusCode::FORBIDDEN, "forbidden".to_string()),
             ApiError::BadRequest(m) => (StatusCode::BAD_REQUEST, m.clone()),
             ApiError::Conflict(m) => (StatusCode::CONFLICT, m.clone()),
             ApiError::PayloadTooLarge => (

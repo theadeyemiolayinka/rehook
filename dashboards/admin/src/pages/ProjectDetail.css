@@ -105,6 +105,33 @@
   color: var(--danger);
 }
 
+.endpoint-row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.endpoint-row-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  transition: background var(--duration-standard), color var(--duration-standard);
+  cursor: pointer;
+}
+
+.endpoint-row-edit:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
 .overview-list {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);

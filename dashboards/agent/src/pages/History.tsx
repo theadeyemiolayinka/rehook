@@ -1,12 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError, type DeliveryRecord } from '../lib/api';
 import { IconRefresh } from '../components/Icons';
+
+function statusBadge(status: string) {
+  if (status === 'delivered')
+    return <span className="badge badge-success">{status}</span>;
+  if (status === 'failed')
+    return <span className="badge badge-error">{status}</span>;
+  return <span className="badge badge-pending">{status}</span>;
+}
 
 export function History() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [records, setRecords] = useState<DeliveryRecord[]>([]);
+  const navigate = useNavigate();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -27,21 +36,16 @@ export function History() {
     load();
   }, [load]);
 
-  const statusBadge = (status: string) => {
-    if (status === 'delivered')
-      return <span className="badge badge-success">{status}</span>;
-    if (status === 'failed')
-      return <span className="badge badge-error">{status}</span>;
-    return <span className="badge badge-pending">{status}</span>;
-  };
-
   return (
     <div>
       <div className="page-header">
         <div className="page-header-row">
           <div>
             <h1>Delivery history</h1>
-            <p>Local delivery attempts recorded by this agent.</p>
+            <p>
+              Local delivery attempts recorded by this agent. Click a row for
+              full delivery and response details.
+            </p>
           </div>
           <button type="button" className="btn btn-sm" onClick={load}>
             <IconRefresh size={14} /> Refresh
@@ -59,7 +63,6 @@ export function History() {
         </div>
       ) : (
         <div className="card">
-          <div className="card-title">Recent deliveries</div>
           {loading ? (
             <div className="empty-state">Loading...</div>
           ) : records.length === 0 ? (
@@ -83,22 +86,28 @@ export function History() {
                 </thead>
                 <tbody>
                   {records.map((r) => (
-                    <tr key={r.id}>
+                    <tr
+                      key={r.id}
+                      className="clickable-row"
+                      onClick={() => navigate(`/deliveries/${r.id}`)}
+                    >
                       <td>{statusBadge(r.status)}</td>
                       <td className="mono">{r.http_status ?? '-'}</td>
                       <td className="mono">
                         {r.duration_ms != null ? `${r.duration_ms}ms` : '-'}
                       </td>
-                      <td className="mono">{r.target_id}</td>
+                      <td className="mono">{r.target_id || '-'}</td>
                       <td className="mono">
-                        <Link to={`/events/${r.event_id}`} className="row-link">
+                        <Link
+                          to={`/events/${r.event_id}`}
+                          className="row-link"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           {r.event_id.slice(0, 8)}
                         </Link>
                       </td>
                       <td className="mono">{r.started_at}</td>
-                      <td className="error-cell">
-                        {r.error_message ?? '-'}
-                      </td>
+                      <td className="error-cell">{r.error_message ?? '-'}</td>
                     </tr>
                   ))}
                 </tbody>

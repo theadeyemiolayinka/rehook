@@ -53,7 +53,8 @@
   white-space: nowrap;
 }
 
-.et-project a:hover {
+.et-project a:hover,
+.et-endpoint a:hover {
   color: var(--accent);
 }
 

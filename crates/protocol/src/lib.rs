@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 /// Protocol version. Bumped on incompatible changes. The server rejects
 /// agents advertising an unsupported major version.
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 
 /// Error category reported by the agent when a delivery fails.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -99,8 +99,14 @@ pub enum ClientMessage {
     /// Heartbeat to keep the connection alive.
     Heartbeat { ts: chrono::DateTime<chrono::Utc> },
     /// Subscribe to an endpoint. The agent will only receive delivery
-    /// instructions for subscribed endpoints.
-    Subscribe { endpoint_id: Uuid },
+    /// instructions for subscribed endpoints. `target_id` declares which
+    /// locally configured target the agent wants deliveries for this
+    /// endpoint routed to. The server stores it so new captured events
+    /// can be dispatched automatically.
+    Subscribe {
+        endpoint_id: Uuid,
+        target_id: String,
+    },
     /// Unsubscribe from an endpoint.
     Unsubscribe { endpoint_id: Uuid },
     /// Acknowledges a delivery instruction was received.
@@ -147,9 +153,12 @@ pub fn decode<T: for<'de> Deserialize<'de>>(text: &str) -> Result<T, serde_json:
     serde_json::from_str(text)
 }
 
-/// Headers that are hop-by-hop or transport-level and must never be replayed
-/// blindly. They are still captured for inspection, but filtered out at
-/// replay time by both the server and the agent (defense in depth).
+/// Headers that are hop-by-hop or transport-negotiation headers and must
+/// never be replayed blindly. They are still captured for inspection, but
+/// filtered out at replay time by both the server and the agent (defense
+/// in depth). `accept-encoding` is included because the original client's
+/// encoding preferences are meaningless to a replay; the agent negotiates
+/// its own and decodes the response before storing it.
 pub const HOP_BY_HOP_HEADERS: &[&str] = &[
     "connection",
     "keep-alive",
@@ -161,6 +170,7 @@ pub const HOP_BY_HOP_HEADERS: &[&str] = &[
     "upgrade",
     "host",
     "content-length",
+    "accept-encoding",
 ];
 
 /// Returns true if a header name should be filtered out before replaying.
@@ -221,9 +231,15 @@ mod tests {
     fn roundtrip_subscribe_endpoint() {
         let msg = ClientMessage::Subscribe {
             endpoint_id: Uuid::new_v4(),
+            target_id: "myapp".into(),
         };
         let text = encode(&msg).unwrap();
         let back: ClientMessage = decode(&text).unwrap();
-        assert!(matches!(back, ClientMessage::Subscribe { .. }));
+        match back {
+            ClientMessage::Subscribe { target_id, .. } => {
+                assert_eq!(target_id, "myapp");
+            }
+            _ => panic!("expected subscribe"),
+        }
     }
 }

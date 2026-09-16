@@ -7,7 +7,7 @@
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, patch, post};
 use axum::{Json, Router};
 use base64::Engine;
 use serde::Serialize;
@@ -24,13 +24,18 @@ pub fn router() -> Router<WebState> {
         .route("/auth/login", post(login))
         .route("/auth/logout", post(logout))
         .route("/targets", get(list_targets).post(add_target))
-        .route("/targets/:id", delete(remove_target))
+        .route("/targets/:id", patch(update_target).delete(remove_target))
         .route("/routes", get(list_routes).post(add_route))
-        .route("/routes/:endpoint_id", delete(remove_route))
+        .route(
+            "/routes/:endpoint_id",
+            patch(update_route).delete(remove_route),
+        )
         .route("/events", get(list_events))
-        .route("/events/:id", get(get_event))
+        .route("/events/:id", get(get_event).delete(delete_event))
+        .route("/events/:id/deliveries", get(list_event_deliveries))
         .route("/events/:id/replay", post(replay_event))
         .route("/deliveries", get(list_deliveries))
+        .route("/deliveries/:id", get(get_delivery))
         .route("/db/stats", get(db_stats))
         .route("/db/clear", delete(clear_db))
         .route("/projects", get(list_projects))
@@ -218,6 +223,34 @@ async fn add_target(
     Ok((StatusCode::CREATED, Json(json!({ "ok": true }))))
 }
 
+#[derive(serde::Deserialize)]
+struct UpdateTargetRequest {
+    url: String,
+}
+
+async fn update_target(
+    State(state): State<WebState>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateTargetRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    targets::validate_url(&req.url).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+
+    let mut config = reload_config(&state)?;
+    if !config.targets.contains_key(&id) {
+        return Err(ApiError::NotFound);
+    }
+    config
+        .targets
+        .insert(id.clone(), req.url.trim().to_string());
+    config
+        .save()
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    tracing::info!(target = %id, url = %req.url, "target updated via web UI");
+
+    Ok(Json(json!({ "ok": true, "id": id, "url": req.url.trim() })))
+}
+
 async fn remove_target(
     State(state): State<WebState>,
     Path(id): Path<String>,
@@ -294,6 +327,17 @@ async fn add_route(
         .save()
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    // If connected, send a live Subscribe so the server updates its
+    // subscription without waiting for a reconnect.
+    if let Ok(eid) = uuid::Uuid::parse_str(req.endpoint_id.trim()) {
+        state
+            .conn_state
+            .send_outbound(hookrelay_protocol::ClientMessage::Subscribe {
+                endpoint_id: eid,
+                target_id: req.target_id.trim().to_string(),
+            });
+    }
+
     tracing::info!(
         endpoint = %req.endpoint_id,
         target = %req.target_id,
@@ -301,6 +345,58 @@ async fn add_route(
     );
 
     Ok((StatusCode::CREATED, Json(json!({ "ok": true }))))
+}
+
+#[derive(serde::Deserialize)]
+struct UpdateRouteRequest {
+    target_id: String,
+}
+
+async fn update_route(
+    State(state): State<WebState>,
+    Path(endpoint_id): Path<String>,
+    Json(req): Json<UpdateRouteRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    if req.target_id.trim().is_empty() {
+        return Err(ApiError::BadRequest("target_id is required".into()));
+    }
+
+    let mut config = reload_config(&state)?;
+
+    if !config.endpoint_targets.contains_key(&endpoint_id) {
+        return Err(ApiError::NotFound);
+    }
+    if !config.targets.contains_key(req.target_id.trim()) {
+        return Err(ApiError::BadRequest(format!(
+            "unknown target '{}'; add it first",
+            req.target_id.trim()
+        )));
+    }
+
+    config
+        .endpoint_targets
+        .insert(endpoint_id.clone(), req.target_id.trim().to_string());
+    config
+        .save()
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Re-subscribe live so the server learns the new target.
+    if let Ok(eid) = uuid::Uuid::parse_str(&endpoint_id) {
+        state
+            .conn_state
+            .send_outbound(hookrelay_protocol::ClientMessage::Subscribe {
+                endpoint_id: eid,
+                target_id: req.target_id.trim().to_string(),
+            });
+    }
+
+    tracing::info!(
+        endpoint = %endpoint_id,
+        target = %req.target_id,
+        "route updated via web UI"
+    );
+
+    Ok(Json(json!({ "ok": true })))
 }
 
 async fn remove_route(
@@ -314,6 +410,13 @@ async fn remove_route(
     config
         .save()
         .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    if let Ok(eid) = uuid::Uuid::parse_str(&endpoint_id) {
+        state
+            .conn_state
+            .send_outbound(hookrelay_protocol::ClientMessage::Unsubscribe { endpoint_id: eid });
+    }
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -361,6 +464,21 @@ async fn get_event(
         "headers": serde_json::from_str::<serde_json::Value>(&event.headers_json).unwrap_or(serde_json::Value::Null),
         "body": event.body.as_deref().map(|b| base64::engine::general_purpose::STANDARD.encode(b)),
     })))
+}
+
+async fn delete_event(
+    State(state): State<WebState>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let deleted = state
+        .db
+        .delete_event(&id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    if !deleted {
+        return Err(ApiError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(serde::Deserialize)]
@@ -435,25 +553,32 @@ async fn replay_event(
     };
 
     // Perform the local delivery using the same code path as live delivery.
-    let outcome = crate::delivery::deliver(&instruction, &config.targets).await;
+    let result =
+        crate::delivery::deliver(&instruction, &config.targets, &config.endpoint_targets).await;
 
-    // Record locally.
+    // Record locally, including bounded response detail for the web UI.
     let rec = crate::db::DeliveryRecord {
         id: instruction.delivery_id.to_string(),
         event_id: event.id.clone(),
-        target_id: req.target_id,
+        target_id: result.resolved_target_id.clone(),
         attempt_number: 0,
-        status: if outcome.success {
+        status: if result.outcome.success {
             "delivered".into()
         } else {
             "failed".into()
         },
-        http_status: outcome.status_code.map(|s| s as i64),
-        duration_ms: Some(outcome.duration_ms as i64),
-        error_category: outcome
+        http_status: result.outcome.status_code.map(|s| s as i64),
+        duration_ms: Some(result.outcome.duration_ms as i64),
+        error_category: result
+            .outcome
             .error_category
             .map(|c| format!("{c:?}").to_lowercase()),
-        error_message: outcome.error_message.clone(),
+        error_message: result
+            .error_detail
+            .clone()
+            .or_else(|| result.outcome.error_message.clone()),
+        response_headers_json: result.response_headers_json.clone(),
+        response_body: result.response_body.clone(),
         started_at: chrono::Utc::now().to_rfc3339(),
         completed_at: Some(chrono::Utc::now().to_rfc3339()),
     };
@@ -462,45 +587,76 @@ async fn replay_event(
     tracing::info!(
         event_id = %event_id,
         target = %url,
-        success = outcome.success,
-        status = ?outcome.status_code,
+        success = result.outcome.success,
+        status = ?result.outcome.status_code,
         "local replay from web UI"
     );
 
     Ok((
         StatusCode::OK,
         Json(json!({
-            "success": outcome.success,
-            "status_code": outcome.status_code,
-            "duration_ms": outcome.duration_ms,
-            "error": outcome.error_message,
+            "success": result.outcome.success,
+            "status_code": result.outcome.status_code,
+            "duration_ms": result.outcome.duration_ms,
+            "error": result.outcome.error_message,
         })),
     ))
 }
 
 // --- Deliveries ---
 
+fn delivery_json(r: &crate::db::DeliveryRecord) -> serde_json::Value {
+    json!({
+        "id": r.id,
+        "event_id": r.event_id,
+        "target_id": r.target_id,
+        "attempt_number": r.attempt_number,
+        "status": r.status,
+        "http_status": r.http_status,
+        "duration_ms": r.duration_ms,
+        "error_category": r.error_category,
+        "error_message": r.error_message,
+        "response_headers": r.response_headers_json
+            .as_deref()
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok()),
+        "response_body": r.response_body
+            .as_deref()
+            .map(|b| base64::engine::general_purpose::STANDARD.encode(b)),
+        "started_at": r.started_at,
+        "completed_at": r.completed_at,
+    })
+}
+
 async fn list_deliveries(State(state): State<WebState>) -> impl IntoResponse {
     let records = state.db.recent_deliveries(200).await.unwrap_or_default();
-    let rows: Vec<serde_json::Value> = records
-        .iter()
-        .map(|r| {
-            json!({
-                "id": r.id,
-                "event_id": r.event_id,
-                "target_id": r.target_id,
-                "attempt_number": r.attempt_number,
-                "status": r.status,
-                "http_status": r.http_status,
-                "duration_ms": r.duration_ms,
-                "error_category": r.error_category,
-                "error_message": r.error_message,
-                "started_at": r.started_at,
-                "completed_at": r.completed_at,
-            })
-        })
-        .collect();
+    let rows: Vec<serde_json::Value> = records.iter().map(delivery_json).collect();
     Json(json!({ "deliveries": rows }))
+}
+
+async fn list_event_deliveries(
+    State(state): State<WebState>,
+    Path(event_id): Path<String>,
+) -> impl IntoResponse {
+    let records = state
+        .db
+        .deliveries_for_event(&event_id)
+        .await
+        .unwrap_or_default();
+    let rows: Vec<serde_json::Value> = records.iter().map(delivery_json).collect();
+    Json(json!({ "deliveries": rows }))
+}
+
+async fn get_delivery(
+    State(state): State<WebState>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let r = state
+        .db
+        .get_delivery(&id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let r = r.ok_or(ApiError::NotFound)?;
+    Ok(Json(delivery_json(&r)))
 }
 
 // --- DB management ---

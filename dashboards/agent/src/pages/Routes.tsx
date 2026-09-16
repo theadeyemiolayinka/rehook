@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, type RouteEntry, type ServerProject, type ServerEndpoint, type Target } from '../lib/api';
 import { Dialog, ConfirmDialog } from '../components/Dialog';
 import { useToast } from '../components/Toast';
-import { IconPlus, IconTrash, IconRefresh, IconWarning } from '../components/Icons';
+import { IconPlus, IconTrash, IconRefresh, IconWarning, IconEdit } from '../components/Icons';
 
 export function Routes() {
   const [loading, setLoading] = useState(true);
@@ -19,6 +19,10 @@ export function Routes() {
 
   const [removeRoute, setRemoveRoute] = useState<RouteEntry | null>(null);
   const [removing, setRemoving] = useState(false);
+
+  const [editRoute, setEditRoute] = useState<RouteEntry | null>(null);
+  const [editTargetId, setEditTargetId] = useState('');
+  const [editing, setEditing] = useState(false);
 
   const toast = useToast();
 
@@ -90,6 +94,32 @@ export function Routes() {
       );
     } finally {
       setRemoving(false);
+    }
+  };
+
+  const openEdit = (r: RouteEntry) => {
+    setEditRoute(r);
+    setEditTargetId(r.target_id);
+  };
+
+  const saveEdit = async () => {
+    if (!editRoute || !editTargetId.trim()) return;
+    setEditing(true);
+    try {
+      await api.patch(
+        `/api/routes/${encodeURIComponent(editRoute.endpoint_id)}`,
+        { target_id: editTargetId.trim() },
+      );
+      toast.show('Route updated', 'success');
+      setEditRoute(null);
+      await load();
+    } catch (e) {
+      toast.show(
+        e instanceof ApiError ? e.message : 'Failed to update route',
+        'error',
+      );
+    } finally {
+      setEditing(false);
     }
   };
 
@@ -170,9 +200,9 @@ export function Routes() {
             <table className="table">
               <thead>
                 <tr>
-                  <th scope="col">Endpoint</th>
+                  <th scope="col">Server Endpoint</th>
                   <th scope="col">Project</th>
-                  <th scope="col">Target</th>
+                  <th scope="col">Client Target</th>
                   <th scope="col"></th>
                 </tr>
               </thead>
@@ -208,6 +238,13 @@ export function Routes() {
                         )}
                       </td>
                       <td className="row-action">
+                        <button
+                          className="icon-btn"
+                          onClick={() => openEdit(r)}
+                          aria-label="Edit route"
+                        >
+                          <IconEdit size={14} />
+                        </button>
                         <button
                           className="icon-btn"
                           onClick={() => setRemoveRoute(r)}
@@ -302,6 +339,57 @@ export function Routes() {
             </div>
           </>
         )}
+      </Dialog>
+
+      <Dialog
+        open={!!editRoute}
+        title="Edit route"
+        description={
+          editRoute
+            ? `Change which local target receives events from "${endpointMap[editRoute.endpoint_id]?.name ?? editRoute.endpoint_id.slice(0, 8)}". The agent re-subscribes live so the change takes effect immediately.`
+            : ''
+        }
+        onClose={() => setEditRoute(null)}
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => setEditRoute(null)}
+              disabled={editing}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              onClick={saveEdit}
+              disabled={editing || !editTargetId.trim()}
+            >
+              {editing ? 'Saving...' : 'Save changes'}
+            </button>
+          </>
+        }
+      >
+        <div className="login-field">
+          <label htmlFor="edit-route-target">Target</label>
+          <select
+            id="edit-route-target"
+            value={editTargetId}
+            onChange={(e) => setEditTargetId(e.target.value)}
+            autoFocus
+          >
+            <option value="">Select a target</option>
+            {targets.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.id} ({t.url})
+              </option>
+            ))}
+          </select>
+          <span className="field-hint">
+            The local application that will receive the delivered events.
+          </span>
+        </div>
       </Dialog>
 
       <ConfirmDialog

@@ -22,6 +22,10 @@ pub struct Endpoint {
     pub public_identifier: String,
     pub enabled: bool,
     pub provider: Option<String>,
+    pub validation_type: String,
+    pub validation_secret: Option<String>,
+    pub validation_header: Option<String>,
+    pub validation_query: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

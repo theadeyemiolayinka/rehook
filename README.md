@@ -66,7 +66,7 @@ See [Agent Setup](docs/getting-started/agent.md) for full instructions.
 1. Deploy the server with Docker Compose.
 2. Sign in to the admin dashboard at `http://localhost:8080`.
 3. Create a project (e.g. "payments").
-4. Create one or more endpoints in that project (e.g. "paystack", "stripe"). Each endpoint has its own webhook URL.
+4. Create one or more endpoints in that project (e.g. "paystack", "stripe"). Each endpoint has its own webhook URL and optional signature validation.
 5. Point your webhook provider at the endpoint URL.
 6. Send a test webhook. Inspect it in the Events page.
 7. Create an agent. Copy the agent ID and one-time token.
@@ -74,7 +74,8 @@ See [Agent Setup](docs/getting-started/agent.md) for full instructions.
 9. Open the agent web UI at `http://localhost:8787` and log in with the agent ID and token.
 10. Go to the Targets page and add a local target (e.g. `myapp` pointing to `http://localhost:8000/webhook`).
 11. Go to the Routes page and connect an endpoint to a target. For example, route the "paystack" endpoint to the "myapp" target. Different endpoints in the same project can route to different targets.
-12. Replay an event from the admin dashboard. The server sends a delivery instruction to the agent, which resolves the target and delivers to your local application.
+12. Send a webhook. The server captures it and dispatches a delivery instruction to the agent over its outbound connection. The agent resolves the target and delivers to your local application.
+13. If the agent is offline, events stay stored on the server. When the agent reconnects and resubscribes, the server delivers every event it missed. You can also replay any event manually from the admin dashboard.
 
 ## Configuration
 

@@ -77,6 +77,10 @@ export interface Endpoint {
   public_identifier: string;
   enabled: boolean;
   provider: string | null;
+  validation_type: string;
+  validation_secret: string | null;
+  validation_header: string | null;
+  validation_query: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -125,6 +129,7 @@ export interface DeliveryRow {
   id: string;
   event_id: string;
   agent_id: string;
+  agent_name: string | null;
   target_id: string;
   attempt_number: number;
   status: string;

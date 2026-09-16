@@ -145,7 +145,7 @@ export function Connection({
           </div>
         ) : (
           <div className="empty-state">
-            No endpoint subscriptions. Add routes in the Targets page to start
+            No endpoint subscriptions. Add routes in the Routes page to start
             receiving events.
           </div>
         )}

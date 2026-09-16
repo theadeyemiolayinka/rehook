@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   api,
   ApiError,
@@ -16,10 +16,10 @@ import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { CopyButton } from '../components/CopyButton';
 import { CodeViewer } from '../components/CodeViewer';
-import { Dialog } from '../components/Dialog';
+import { Dialog, ConfirmDialog } from '../components/Dialog';
 import { StatusIndicator } from '../components/StatusIndicator';
 import { useToast } from '../components/Toast';
-import { IconReplay, IconEye, IconEyeOff } from '../components/Icons';
+import { IconReplay, IconEye, IconEyeOff, IconTrash } from '../components/Icons';
 import { decodeBase64, formatBytes, formatDateTime, formatRelative } from '../lib/format';
 import './EventDetail.css';
 
@@ -33,14 +33,19 @@ export function EventDetail() {
   const [deliveries, setDeliveries] = useState<DeliveryRow[]>([]);
   const [unmasked, setUnmasked] = useState(false);
   const [replayOpen, setReplayOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const navigate = useNavigate();
+  const toast = useToast();
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (showSpinner = true, unmaskedOverride?: boolean) => {
     if (!id) return;
-    setLoading(true);
+    const useUnmasked = unmaskedOverride !== undefined ? unmaskedOverride : unmasked;
+    if (showSpinner) setLoading(true);
     setError(null);
     try {
       const ev = await api.get<EventDetail>(
-        `/api/events/${id}?unmasked=${unmasked}`,
+        `/api/events/${id}?unmasked=${useUnmasked}`,
       );
       setEvent(ev);
       if (ev.endpoint_id) {
@@ -70,13 +75,37 @@ export function EventDetail() {
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to load event');
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   }, [id, unmasked]);
 
   useEffect(() => {
     load();
-  }, [load]);
+  }, [id]); // Only run on mount and when id changes
+
+  const handleDelete = async () => {
+    if (!id) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/api/events/${id}`);
+      toast.show('Event deleted', 'success');
+      navigate('/events');
+    } catch (e) {
+      toast.show(
+        e instanceof ApiError ? e.message : 'Failed to delete event',
+        'error',
+      );
+      setDeleting(false);
+      setDeleteOpen(false);
+    }
+  };
+
+  const toggleUnmasked = () => {
+    const next = !unmasked;
+    setUnmasked(next);
+    // Reload with the new unmasked state, without showing the loading spinner.
+    load(false, next);
+  };
 
   if (loading) {
     return (
@@ -96,7 +125,7 @@ export function EventDetail() {
         <EmptyState
           title="Unable to load event"
           description={error}
-          action={<Button onClick={load}>Retry</Button>}
+          action={<Button onClick={() => load()}>Retry</Button>}
         />
       </div>
     );
@@ -124,13 +153,23 @@ export function EventDetail() {
           </span>
         }
         actions={
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setReplayOpen(true)}
-          >
-            <IconReplay size={14} /> Replay
-          </Button>
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setDeleteOpen(true)}
+              aria-label="Delete event"
+            >
+              <IconTrash size={14} />
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setReplayOpen(true)}
+            >
+              <IconReplay size={14} /> Replay
+            </Button>
+          </>
         }
       />
 
@@ -197,7 +236,7 @@ export function EventDetail() {
             <button
               type="button"
               className="event-detail-toggle"
-              onClick={() => setUnmasked((u) => !u)}
+              onClick={toggleUnmasked}
               aria-pressed={unmasked}
             >
               {unmasked ? (
@@ -250,6 +289,7 @@ export function EventDetail() {
                   <tr>
                     <th scope="col">#</th>
                     <th scope="col">Status</th>
+                    <th scope="col">Agent</th>
                     <th scope="col">HTTP</th>
                     <th scope="col">Duration</th>
                     <th scope="col">Target</th>
@@ -267,6 +307,11 @@ export function EventDetail() {
                           label={d.status}
                         />
                       </td>
+                      <td>
+                        {d.agent_name ?? (
+                          <span className="text-tertiary">unknown</span>
+                        )}
+                      </td>
                       <td className="deliv-mono">
                         {d.http_status ?? '-'}
                       </td>
@@ -274,7 +319,7 @@ export function EventDetail() {
                         {d.duration_ms != null ? `${d.duration_ms}ms` : '-'}
                       </td>
                       <td className="deliv-mono deliv-target">
-                        {d.target_id}
+                        {d.target_id || '-'}
                       </td>
                       <td className="deliv-mono">
                         {formatRelative(d.started_at)}
@@ -297,6 +342,17 @@ export function EventDetail() {
         projectName={project?.name}
         onClose={() => setReplayOpen(false)}
         onDone={load}
+      />
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Delete event"
+        description="Permanently delete this event and its delivery records? This cannot be undone."
+        confirmLabel="Delete event"
+        destructive
+        loading={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteOpen(false)}
       />
     </div>
   );
@@ -321,14 +377,12 @@ interface ReplayProps {
 function ReplayDialog({ open, eventId, onClose, onDone }: ReplayProps) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentId, setAgentId] = useState('');
-  const [targetId, setTargetId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
     if (!open) return;
     setAgentId('');
-    setTargetId('');
     api
       .get<{ agents: Agent[] }>('/api/agents')
       .then((res) => {
@@ -340,12 +394,11 @@ function ReplayDialog({ open, eventId, onClose, onDone }: ReplayProps) {
   }, [open]);
 
   async function submit() {
-    if (!agentId || !targetId.trim()) return;
+    if (!agentId) return;
     setSubmitting(true);
     try {
       await api.post(`/api/events/${eventId}/replay`, {
         agent_id: agentId,
-        target_id: targetId.trim(),
       });
       toast.show('Replay dispatched', 'success');
       onClose();
@@ -364,7 +417,7 @@ function ReplayDialog({ open, eventId, onClose, onDone }: ReplayProps) {
     <Dialog
       open={open}
       title="Replay event"
-      description="Send this event to a connected agent for local delivery. The original event is not modified."
+      description="Send this event to a connected agent for local delivery. The agent resolves the destination from its own routes; the server never sends a target address. The original event is not modified."
       onClose={onClose}
       footer={
         <>
@@ -375,7 +428,7 @@ function ReplayDialog({ open, eventId, onClose, onDone }: ReplayProps) {
             variant="primary"
             onClick={submit}
             loading={submitting}
-            disabled={!agentId || !targetId.trim()}
+            disabled={!agentId}
           >
             Dispatch replay
           </Button>
@@ -385,45 +438,32 @@ function ReplayDialog({ open, eventId, onClose, onDone }: ReplayProps) {
       {agents.length === 0 ? (
         <div className="replay-no-agents">
           No connected agents. Start the agent on your machine and ensure it is
-          subscribed to this project.
+          connected.
         </div>
       ) : (
-        <>
-          <div className="field">
-            <label className="field-label" htmlFor="replay-agent">
-              Agent
-            </label>
-            <select
-              id="replay-agent"
-              className="input"
-              value={agentId}
-              onChange={(e) => setAgentId(e.target.value)}
-            >
-              <option value="">Select an agent</option>
-              {agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label className="field-label" htmlFor="replay-target">
-              Target ID
-            </label>
-            <input
-              id="replay-target"
-              className="input"
-              value={targetId}
-              onChange={(e) => setTargetId(e.target.value)}
-              placeholder="my-app"
-              autoFocus
-            />
-            <span className="field-hint">
-              The target must be configured in the agent allowlist.
-            </span>
-          </div>
-        </>
+        <div className="field">
+          <label className="field-label" htmlFor="replay-agent">
+            Agent
+          </label>
+          <select
+            id="replay-agent"
+            className="input"
+            value={agentId}
+            onChange={(e) => setAgentId(e.target.value)}
+            autoFocus
+          >
+            <option value="">Select an agent</option>
+            {agents.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+          <span className="field-hint">
+            The agent must have a route configured for this endpoint, or the
+            replay is dropped.
+          </span>
+        </div>
       )}
     </Dialog>
   );

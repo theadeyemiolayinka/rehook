@@ -34,6 +34,14 @@ pub struct CreateEndpointRequest {
     pub name: String,
     #[serde(default)]
     pub provider: Option<String>,
+    #[serde(default)]
+    pub validation_type: Option<String>,
+    #[serde(default)]
+    pub validation_secret: Option<String>,
+    #[serde(default)]
+    pub validation_header: Option<String>,
+    #[serde(default)]
+    pub validation_query: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -41,6 +49,10 @@ struct UpdateEndpointRequest {
     name: Option<String>,
     enabled: Option<bool>,
     provider: Option<String>,
+    validation_type: Option<String>,
+    validation_secret: Option<String>,
+    validation_header: Option<String>,
+    validation_query: Option<String>,
 }
 
 async fn list_all(
@@ -48,7 +60,9 @@ async fn list_all(
     _session: AuthSession,
 ) -> ApiResult<impl IntoResponse> {
     let endpoints: Vec<Endpoint> = sqlx::query_as(
-        "SELECT id, project_id, name, public_identifier, enabled, provider, created_at, updated_at
+        "SELECT id, project_id, name, public_identifier, enabled, provider,
+                validation_type, validation_secret, validation_header, validation_query,
+                created_at, updated_at
          FROM endpoints ORDER BY created_at DESC",
     )
     .fetch_all(&state.pool)
@@ -62,7 +76,9 @@ async fn list_for_project(
     Path(project_id): Path<String>,
 ) -> ApiResult<impl IntoResponse> {
     let endpoints: Vec<Endpoint> = sqlx::query_as(
-        "SELECT id, project_id, name, public_identifier, enabled, provider, created_at, updated_at
+        "SELECT id, project_id, name, public_identifier, enabled, provider,
+                validation_type, validation_secret, validation_header, validation_query,
+                created_at, updated_at
          FROM endpoints WHERE project_id = ? ORDER BY created_at DESC",
     )
     .bind(&project_id)
@@ -92,15 +108,28 @@ async fn create_for_project(
     let id = uuid::Uuid::new_v4().to_string();
     let public_identifier = generate_public_identifier();
     let endpoint: Endpoint = sqlx::query_as(
-        "INSERT INTO endpoints (id, project_id, name, public_identifier, provider)
-         VALUES (?, ?, ?, ?, ?)
-         RETURNING id, project_id, name, public_identifier, enabled, provider, created_at, updated_at",
+        "INSERT INTO endpoints
+            (id, project_id, name, public_identifier, provider,
+             validation_type, validation_secret, validation_header, validation_query)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         RETURNING id, project_id, name, public_identifier, enabled, provider,
+                   validation_type, validation_secret, validation_header, validation_query,
+                   created_at, updated_at",
     )
     .bind(&id)
     .bind(&project_id)
     .bind(req.name.trim())
     .bind(&public_identifier)
     .bind(req.provider.as_deref().map(str::trim))
+    .bind(
+        req.validation_type
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("none"),
+    )
+    .bind(req.validation_secret.as_deref().map(str::trim))
+    .bind(req.validation_header.as_deref().map(str::trim))
+    .bind(req.validation_query.as_deref().map(str::trim))
     .fetch_one(&state.pool)
     .await?;
 
@@ -113,7 +142,9 @@ async fn get_one(
     Path(id): Path<String>,
 ) -> ApiResult<impl IntoResponse> {
     let endpoint: Endpoint = sqlx::query_as(
-        "SELECT id, project_id, name, public_identifier, enabled, provider, created_at, updated_at
+        "SELECT id, project_id, name, public_identifier, enabled, provider,
+                validation_type, validation_secret, validation_header, validation_query,
+                created_at, updated_at
          FROM endpoints WHERE id = ?",
     )
     .bind(&id)
@@ -134,13 +165,23 @@ async fn update(
             name = COALESCE(?, name),
             enabled = COALESCE(?, enabled),
             provider = COALESCE(?, provider),
+            validation_type = COALESCE(?, validation_type),
+            validation_secret = COALESCE(?, validation_secret),
+            validation_header = COALESCE(?, validation_header),
+            validation_query = COALESCE(?, validation_query),
             updated_at = datetime('now')
          WHERE id = ?
-         RETURNING id, project_id, name, public_identifier, enabled, provider, created_at, updated_at",
+         RETURNING id, project_id, name, public_identifier, enabled, provider,
+                   validation_type, validation_secret, validation_header, validation_query,
+                   created_at, updated_at",
     )
     .bind(req.name.as_deref().map(str::trim))
     .bind(req.enabled)
     .bind(req.provider.as_deref().map(str::trim))
+    .bind(req.validation_type.as_deref().map(str::trim))
+    .bind(req.validation_secret.as_deref().map(str::trim))
+    .bind(req.validation_header.as_deref().map(str::trim))
+    .bind(req.validation_query.as_deref().map(str::trim))
     .bind(&id)
     .fetch_optional(&state.pool)
     .await?

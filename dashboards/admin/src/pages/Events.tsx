@@ -104,7 +104,16 @@ export function Events() {
                 </Badge>
               </div>
               <div className="et-endpoint">
-                {endpoints[ev.endpoint_id]?.name ?? 'unknown'}
+                {endpoints[ev.endpoint_id] ? (
+                  <Link
+                    to={`/projects/${ev.project_id}`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {endpoints[ev.endpoint_id].name}
+                  </Link>
+                ) : (
+                  <span className="text-tertiary">unknown</span>
+                )}
               </div>
               <div className="et-project">
                 {projects[ev.project_id] ? (

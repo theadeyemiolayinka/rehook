@@ -37,11 +37,11 @@ View your server URL, agent identity, and the endpoints you are subscribed to. S
 
 ### Targets page
 
-Add and remove local delivery targets. A target is a local HTTP destination (e.g. `http://localhost:8000/webhook`) identified by a short ID (e.g. `myapp`). The agent only ever delivers to URLs you configure here.
+Add, edit, and remove local delivery targets. A target is a local HTTP destination (e.g. `http://localhost:8000/webhook`) identified by a short ID (e.g. `myapp`). The agent only ever delivers to URLs you configure here. Editing a target updates the URL in place; routes referencing it keep working.
 
 ### Routes page
 
-Connect inbound endpoints to local targets. A route maps an endpoint from your HookRelay server to a local target. When the server sends a delivery for an event on that endpoint, the agent uses the route to find the right target.
+Connect inbound endpoints to local targets. A route maps an endpoint from your HookRelay server to a local target. When the server sends a delivery for an event on that endpoint, the agent uses the route to find the right target. You can change a route's target at any time; the agent re-subscribes live so the change takes effect immediately without reconnecting.
 
 Different endpoints in the same project can route to different targets. For example, in a "payments" project, route the "paystack" endpoint to one target and the "stripe" endpoint to another.
 
@@ -49,11 +49,11 @@ The endpoint dropdown is grouped by project so you can identify endpoints by nam
 
 ### Events page
 
-Inspect captured webhook events stored locally. Click an event to see full headers and payload on a dedicated detail page. Replay any event to a configured target.
+Inspect captured webhook events stored locally. Click an event to see full headers and payload on a dedicated detail page. Replay any event to a configured target, or delete it from local storage.
 
 ### History page
 
-View delivery attempts with HTTP status, duration, and error details. Click a delivery to jump to the related event.
+View delivery attempts with HTTP status, duration, and error details. Click a row to open the delivery detail page, which shows the full response status, response headers, and a formatted view of the response body when one was captured. Response data stays local to the agent and is never sent to the server.
 
 ### Settings page
 
