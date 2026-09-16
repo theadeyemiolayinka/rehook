@@ -12,8 +12,9 @@ services:
       # directly and the host binding only matters for direct access.
       - "${REHOOK_HOST_PORT:-8080}:8080"
     environment:
-      # Required: set an admin password for first boot.
-      ADMIN_USERNAME: admin
+      # Admin bootstrap credentials. ADMIN_PASSWORD is required on first
+      # boot; the username defaults to admin.
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set}
       # Required: a 32-byte hex key for session signing. Generate with:
       #   openssl rand -hex 32
@@ -21,10 +22,12 @@ services:
       # Public URL providers use to send webhooks. Set to your domain.
       REHOOK_PUBLIC_BASE_URL: ${REHOOK_PUBLIC_BASE_URL:-http://localhost:8080}
       # Optional tuning.
-      REHOOK_MAX_WEBHOOK_BODY_SIZE: "1048576"
-      REHOOK_MAX_STORED_EVENTS: "10000"
-      REHOOK_EVENT_RETENTION_DAYS: "14"
-      RUST_LOG: "rehook=info,tower_http=info"
+      REHOOK_MAX_WEBHOOK_BODY_SIZE: ${REHOOK_MAX_WEBHOOK_BODY_SIZE:-1048576}
+      REHOOK_MAX_STORED_EVENTS: ${REHOOK_MAX_STORED_EVENTS:-10000}
+      REHOOK_EVENT_RETENTION_DAYS: ${REHOOK_EVENT_RETENTION_DAYS:-14}
+      REHOOK_SESSION_TTL_HOURS: ${REHOOK_SESSION_TTL_HOURS:-24}
+      REHOOK_TRUSTED_PROXY_HOPS: ${REHOOK_TRUSTED_PROXY_HOPS:-0}
+      RUST_LOG: ${RUST_LOG:-rehook=info,tower_http=info}
     volumes:
       # SQLite database (events, sessions, agents). The named volume keeps
       # data across rebuilds and restarts. To use a host path instead:
